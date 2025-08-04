@@ -137,3 +137,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# internal correctness testing
+*/tests/*

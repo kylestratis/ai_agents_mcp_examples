@@ -9,6 +9,7 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.types import TextResourceContents
 
 load_dotenv()
 
@@ -61,12 +62,33 @@ class MCPClient:
         await self._session.initialize()
         self._connected = True
 
-    async def use_tool(self, tool_name: str, tool_args: list | None = None):
-        """
-        Given a tool name and optionally a list of argumnents, execute the
-        tool
-        """
-        pass
+    async def use_tool(
+        self, tool_name: str, arguments: dict[str, Any] | None = None
+    ) -> list[str]:
+        if not self._connected:
+            raise RuntimeError("Client not connected to a server")
+
+        tool_call_result = await self._session.call_tool(
+            name=tool_name, arguments=arguments
+        )
+        logger.debug(f"Calling tool {tool_name} with arguments {arguments}")
+
+        results = []
+        if tool_call_result.content:
+            for content in tool_call_result.content:
+                match content.type:
+                    case "text":
+                        results.append(content.text)
+                    case "image" | "audio":
+                        results.append(content.data)
+                    case "resource":
+                        if isinstance(content.resource, TextResourceContents):
+                            results.append(content.resource.text)
+                        else:
+                            results.append(content.resource.blob)
+        else:
+            logger.warning(f"No content in tool call result for tool {tool_name}")
+        return results
 
     async def get_available_tools(self) -> list[dict[str, Any]]:
         if not self._connected:
@@ -112,8 +134,8 @@ print("Welcome to your AI Assistant. Type 'goodbye' to quit.")
 
 async def main():
     await mcp_client.connect()
-    available_tools = await mcp_client.get_available_tools()
-    print(f"Available tools: {", ".join([tool['name'] for tool in available_tools])}")
+    available_tools = [tool["name"] for tool in await mcp_client.get_available_tools()]
+    print(f"Available tools: {available_tools}")
     while True:
         prompt = input("You: ")
         if prompt.lower() == "goodbye":

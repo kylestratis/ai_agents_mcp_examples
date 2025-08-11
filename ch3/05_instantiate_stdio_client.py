@@ -59,13 +59,13 @@ class MCPClient:
         await self._session.initialize()
         self._connected = True
 
-    async def list_tools(self) -> list[Any]:
+    async def get_available_tools(self) -> list[Any]:
         """
         Retrieve tools that the server has made available.
         """
         pass
 
-    async def call_tool(self, tool_name: str, tool_args: list | None = None):
+    async def use_tool(self, tool_name: str, tool_args: list | None = None):
         """
         Given a tool name and optionally a list of argumnents, execute the
         tool
@@ -116,6 +116,7 @@ async def main():
         )
         for response in message.content:
             print(f"Assistant: {response.text}")
+    await mcp_client.disconnect()
 
 
 if __name__ == "__main__":

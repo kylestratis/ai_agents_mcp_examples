@@ -1,20 +1,18 @@
-import asyncio
 import logging
-import os
 from contextlib import AsyncExitStack
-from pathlib import Path
 from typing import Any
 
-from anthropic import Anthropic
-from dotenv import load_dotenv
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
-from mcp.types import TextResourceContents
+from mcp.types import (
+    BlobResourceContents,
+    Prompt,
+    PromptMessage,
+    Resource,
+    ResourceTemplate,
+    TextResourceContents,
+)
 
-load_dotenv()
-
-LLM_API_KEY = os.environ["LLM_API_KEY"]
-anthropic_client = Anthropic(api_key=LLM_API_KEY)
 logger = logging.getLogger(__name__)
 
 
@@ -90,6 +88,52 @@ class MCPClient:
             logger.warning(f"No content in tool call result for tool {tool_name}")
         return results
 
+    async def get_resource(
+        self, uri: str
+    ) -> list[BlobResourceContents | TextResourceContents]:
+        if not self._connected:
+            raise RuntimeError("Client not connected to a server")
+        resource_read_result = await self._session.read_resource(uri=uri)
+
+        if not resource_read_result.contents:
+            logger.warning(f"No content read for resource URI {uri}")
+        return resource_read_result.contents
+
+    async def load_prompt(
+        self, name: str, arguments: dict[str, str]
+    ) -> list[PromptMessage]:
+        if not self._connected:
+            raise RuntimeError("Client not connected to a server")
+        prompt_load_result = await self._session.get_prompt(
+            name=name, arguments=arguments
+        )
+
+        if not prompt_load_result.messages:
+            logger.warning(f"No prompt found for prompt {name}")
+        else:
+            logger.warning(
+                f"Loaded prompt {name} with description {prompt_load_result.description}"
+            )
+        return prompt_load_result.messages
+
+    async def get_available_resources(self) -> list[Resource]:
+        if not self._connected:
+            raise RuntimeError("Client not connected to a server")
+
+        resources_result = await self._session.list_resources()
+        if not resources_result.resources:
+            logger.warning("No resources found on server")
+        return resources_result.resources
+
+    async def get_available_resource_templates(self) -> list[ResourceTemplate]:
+        if not self._connected:
+            raise RuntimeError("Client not connected to a server")
+
+        resource_templates_result = await self._session.list_resource_templates()
+        if not resource_templates_result.resources:
+            logger.warning("No resource templates found on server")
+        return resource_templates_result.resources
+
     async def get_available_tools(self) -> list[dict[str, Any]]:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
@@ -107,6 +151,15 @@ class MCPClient:
         ]
         return available_tools
 
+    async def get_available_prompts(self) -> list[Prompt]:
+        if not self._connected:
+            raise RuntimeError("Client not connected to a server")
+
+        prompt_result = await self._session.list_prompts()
+        if not prompt_result.prompts:
+            logger.warning("No prompts found on server")
+        return prompt_result.prompts
+
     async def disconnect(self) -> None:
         """
         Clean up any resources
@@ -115,88 +168,3 @@ class MCPClient:
             await self._exit_stack.aclose()
             self._connected = False
             self._session = None
-
-
-mcp_client = MCPClient(
-    name="calculator_server_connection",
-    command="uv",
-    server_args=[
-        "--directory",
-        str(Path(__file__).parent.resolve()),
-        "run",
-        "calculator_server.py",
-    ],
-)
-
-
-print("Welcome to your AI Assistant. Type 'goodbye' to quit.")
-
-
-async def main():
-    try:
-        await mcp_client.connect()
-        available_tools = await mcp_client.get_available_tools()
-        print(
-            f"Available tools: {", ".join([tool['name'] for tool in available_tools])}"
-        )
-
-        while True:
-            prompt = input("You: ")
-            if prompt.lower() == "goodbye":
-                print("AI Assistant: Goodbye!")
-                break
-            message = anthropic_client.messages.create(
-                max_tokens=4096,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                model="claude-sonnet-4-0",
-                tools=available_tools,
-                tool_choice={"type": "auto"},
-            )
-
-            tool_use_message_block = {"role": "user", "content": []}
-            if message.stop_reason == "tool_use":
-                tool_use_messages = [
-                    message for message in message.content if message.type == "tool_use"
-                ]
-                for tool_use in tool_use_messages:
-                    tool_result = await mcp_client.use_tool(
-                        tool_name=tool_use.name, arguments=tool_use.input
-                    )
-                    tool_use_message_block["content"].append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": "\n".join(tool_result),
-                        }
-                    )
-
-            if tool_use_message_block["content"]:
-                response = anthropic_client.messages.create(
-                    max_tokens=4096,
-                    messages=[
-                        {"role": "user", "content": prompt},
-                        {"role": "assistant", "content": message.content},
-                        tool_use_message_block,
-                    ],
-                    model="claude-sonnet-4-0",
-                    tools=available_tools,
-                    tool_choice={"type": "auto"},
-                )
-            else:
-                response = message
-
-            display_response = next(
-                message.text for message in response.content if hasattr(message, "text")
-            )
-            print(f"Assistant: {display_response}")
-    finally:
-        await mcp_client.disconnect()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

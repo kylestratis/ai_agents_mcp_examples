@@ -102,6 +102,34 @@ async def count_rs(text: str) -> str:
     return f"The letter 'R' appears {count} times in: '{text}'"
 
 
+@mcp.resource("resource://math-constants")
+async def math_constants() -> str:
+    """Provide a collection of important mathematical constants.
+
+    Returns:
+        A formatted string containing mathematical constants and their values.
+    """
+    constants = {
+        "π (Pi)": math.pi,
+        "e (Euler's number)": math.e,
+        "τ (Tau)": math.tau,
+        "φ (Golden ratio)": (1 + math.sqrt(5)) / 2,
+        "√2 (Square root of 2)": math.sqrt(2),
+        "√3 (Square root of 3)": math.sqrt(3),
+        "ln(2) (Natural log of 2)": math.log(2),
+        "ln(10) (Natural log of 10)": math.log(10),
+    }
+
+    result = "Mathematical Constants:\n"
+    result += "=" * 25 + "\n\n"
+
+    for name, value in constants.items():
+        result += f"{name:<25} = {value:.10f}\n"
+
+    result += "\nThese constants can be used in calculations with the calculator tools."
+    return result
+
+
 if __name__ == "__main__":
     # Initialize and run the server
     mcp.run(transport="stdio")

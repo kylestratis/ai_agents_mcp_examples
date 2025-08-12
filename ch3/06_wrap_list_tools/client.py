@@ -1,19 +1,16 @@
-import os
+import logging
 from contextlib import AsyncExitStack
 from typing import Any
 
-from anthropic import Anthropic
-from dotenv import load_dotenv
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
-load_dotenv()
-
-LLM_API_KEY = os.environ["LLM_API_KEY"]
-anthropic_client = Anthropic(api_key=LLM_API_KEY)
+logger = logging.getLogger(__name__)
 
 
 class MCPClient:
+    """MCP Client class for connecting to and interacting with MCP servers."""
+
     def __init__(
         self,
         name: str,
@@ -21,6 +18,7 @@ class MCPClient:
         server_args: list[str],
         env_vars: dict[str, str] = None,
     ) -> None:
+        """Initialize the MCPClient with server connection parameters."""
         self.name = name
         self.command = command
         self.server_args = server_args
@@ -30,9 +28,7 @@ class MCPClient:
         self._connected: bool = False
 
     async def connect(self) -> None:
-        """
-        Connect to the server set in the constructor.
-        """
+        """Connect to the server set in the constructor."""
         if self._connected:
             raise RuntimeError("Client is already connected")
 
@@ -57,46 +53,31 @@ class MCPClient:
         await self._session.initialize()
         self._connected = True
 
-    async def get_available_tools(self) -> list[Any]:
-        """
-        Retrieve tools that the server has made available.
-        """
+    async def use_tool(self, tool_name: str, tool_args: list | None = None):
+        """Given a tool name and optionally a list of argumnents, execute the tool."""
         pass
 
-    async def use_tool(self, tool_name: str, tool_args: list | None = None):
-        """
-        Given a tool name and optionally a list of argumnents, execute the
-        tool
-        """
-        pass
+    async def get_available_tools(self) -> list[dict[str, Any]]:
+        """Retrieve tools that the server has made available."""
+        if not self._connected:
+            raise RuntimeError("Client not connected to a server")
+
+        tools_result = await self._session.list_tools()
+        if not tools_result.tools:
+            logger.warning("No tools found on server")
+        available_tools = [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.inputSchema,
+            }
+            for tool in tools_result.tools
+        ]
+        return available_tools
 
     async def disconnect(self) -> None:
-        """
-        Clean up any resources
-        """
+        """Clean up any resources."""
         if self._exit_stack:
             await self._exit_stack.aclose()
             self._connected = False
             self._session = None
-
-
-print("Welcome to your AI Assistant. Type 'goodbye' to quit.")
-
-while True:
-    prompt = input("You: ")
-    if prompt.lower() == "goodbye":
-        print("AI Assistant: Goodbye!")
-        break
-    message = anthropic_client.messages.create(
-        max_tokens=1024,
-        system="You are a helpful assistant.",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-        model="claude-sonnet-4-0",
-    )
-    for response in message.content:
-        print(f"Assistant: {response.text}")

@@ -4,4 +4,7 @@ Welcome to the code repo for AI Agents with MCP. For each chapter, you'll find s
 
 # Installation
 
+(TODO: using uv)
+
 # Use
+`uv run ....`

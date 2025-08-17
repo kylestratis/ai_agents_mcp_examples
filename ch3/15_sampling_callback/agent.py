@@ -22,8 +22,9 @@ class Agent:
         self.mcp_client = mcp_client
         self.anthropic_client = anthropic_client
         self.available_resources = {}
+        self.available_prompts = {}
 
-    async def _select_resources(self, prompt: str) -> list[str]:
+    async def _select_resources(self, user_query: str) -> list[str]:
         """Use LLM to intelligently select relevant resources."""
         if not self.available_resources:
             return []
@@ -34,7 +35,7 @@ class Agent:
         }
 
         selection_prompt = f"""
-Given this user question: "{prompt}"
+Given this user question: "{user_query}"
 
 And these available resources:
 {json.dumps(resource_descriptions, indent=2)}
@@ -54,7 +55,6 @@ Example: ["math-constants"] or []
             )
 
             response_text = response.content[0].text.strip()
-            # Extract JSON from response (handle case where LLM adds explanation)
             if "[" in response_text and "]" in response_text:
                 start = response_text.find("[")
                 end = response_text.rfind("]") + 1
@@ -64,6 +64,49 @@ Example: ["math-constants"] or []
 
         except Exception as e:
             logger.warning(f"Failed to select resources with LLM: {e}")
+
+        return []
+
+    async def _select_prompts(self, user_query: str) -> list[str]:
+        """Use LLM to intelligently select relevant prompts."""
+        if not self.available_prompts:
+            return []
+
+        prompt_descriptions = {
+            name: prompt.description or f"Prompt: {name}"
+            for name, prompt in self.available_prompts.items()
+        }
+
+        selection_prompt = f"""
+Given this user question: "{user_query}"
+
+And these available prompt templates:
+{json.dumps(prompt_descriptions, indent=2)}
+
+Which prompts (if any) would provide helpful instructions or guidance for answering this question?
+Return a JSON array of prompt names, or an empty array if no prompts are needed.
+Only include prompts that are directly relevant.
+
+Example: ["calculation-helper", "step-by-step-math"] or []
+"""
+
+        try:
+            response = self.anthropic_client.messages.create(
+                max_tokens=200,
+                messages=[{"role": "user", "content": selection_prompt}],
+                model="claude-sonnet-4-0",
+            )
+
+            response_text = response.content[0].text.strip()
+            if "[" in response_text and "]" in response_text:
+                start = response_text.find("[")
+                end = response_text.rfind("]") + 1
+                json_part = response_text[start:end]
+                selected_prompts = json.loads(json_part)
+                return [p for p in selected_prompts if p in self.available_prompts]
+
+        except Exception as e:
+            logger.warning(f"Failed to select prompts with LLM: {e}")
 
         return []
 
@@ -114,20 +157,56 @@ Example: ["math-constants"] or []
 
         return context_messages
 
-    async def _refresh_resources(self) -> None:
+    async def _load_selected_prompts(self, prompt_names: list[str]) -> str:
+        """Load the specified prompts as system instructions."""
+        system_instructions = []
+
+        for prompt_name in prompt_names:
+            if prompt_name in self.available_prompts:
+                print(f"Using prompt: {prompt_name}")
+                try:
+                    prompt_content = await self.mcp_client.load_prompt(
+                        name=prompt_name, arguments={}
+                    )
+
+                    # Extract the prompt text
+                    prompt_text = ""
+                    for message in prompt_content.messages:
+                        if hasattr(message.content, "text"):
+                            prompt_text += message.content.text + "\n"
+                        elif isinstance(message.content, str):
+                            prompt_text += message.content + "\n"
+
+                    if prompt_text.strip():
+                        system_instructions.append(
+                            f"[Prompt: {prompt_name}]\n{prompt_text.strip()}"
+                        )
+
+                except Exception as e:
+                    print(f"Error loading prompt {prompt_name}: {e}")
+
+        return "\n\n".join(system_instructions)
+
+    async def _refresh(self) -> None:
         available_resources = await self.mcp_client.get_available_resources()
         self.available_resources = {
             resource.name: resource for resource in available_resources
         }
+        available_prompts = await self.mcp_client.get_available_prompts()
+        self.available_prompts = {prompt.name: prompt for prompt in available_prompts}
 
     async def run(self):
         try:
             print(
-                "Welcome to your AI Assistant. Type 'goodbye' to quit or 'refresh' to reload available resources."
+                "Welcome to your AI Assistant. Type 'goodbye' to quit or 'refresh' to reload and redisplay available resources."
             )
             await self.mcp_client.connect()
             available_tools = await self.mcp_client.get_available_tools()
-            await self._refresh_resources()
+            await self._refresh()
+
+            print(
+                f"Loaded {len(self.available_resources)} resources and {len(self.available_prompts)} prompts"
+            )
 
             while True:
                 prompt = input("You: ")
@@ -137,12 +216,19 @@ Example: ["math-constants"] or []
                     break
 
                 if prompt.lower() == "refresh":
-                    await self._refresh_resources()
+                    await self._refresh()
                     continue
 
+                # Select relevant resources and prompts
                 selected_resource_names = await self._select_resources(prompt)
+                selected_prompt_names = await self._select_prompts(prompt)
+
+                # Load relevant resources and prompts
                 context_messages = await self._load_selected_resources(
                     selected_resource_names
+                )
+                system_instructions = await self._load_selected_prompts(
+                    selected_prompt_names
                 )
 
                 # Build conversation with initial user message and any context
@@ -154,13 +240,19 @@ Example: ["math-constants"] or []
 
                 # Tool use loop - continue until we get a final text response
                 while True:
-                    # Get LLM response
-                    current_response = anthropic_client.messages.create(
-                        max_tokens=4096,
-                        messages=conversation_messages,
-                        model="claude-sonnet-4-0",
-                        tools=available_tools,
-                        tool_choice={"type": "auto"},
+                    create_message_args = {
+                        "max_tokens": 4096,
+                        "messages": conversation_messages,
+                        "model": "claude-sonnet-4-0",
+                        "tools": available_tools,
+                        "tool_choice": {"type": "auto"},
+                    }
+
+                    if system_instructions:
+                        create_message_args["system"] = system_instructions
+
+                    current_response = self.anthropic_client.messages.create(
+                        **create_message_args
                     )
 
                     # Add assistant message to conversation
@@ -176,8 +268,6 @@ Example: ["math-constants"] or []
                             for block in current_response.content
                             if block.type == "tool_use"
                         ]
-
-                        print(f"Executing {len(tool_use_blocks)} tool(s)...")
 
                         # Execute all tools and collect results
                         tool_results = []
@@ -231,6 +321,7 @@ if __name__ == "__main__":
             "run",
             "calculator_server.py",
         ],
+        llm_client=anthropic_client,
     )
     agent = Agent(mcp_client, anthropic_client)
     asyncio.run(agent.run())

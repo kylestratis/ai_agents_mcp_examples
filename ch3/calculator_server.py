@@ -5,14 +5,17 @@ Provides mathematical operations as tools for calculation tasks.
 
 import math
 
-from mcp.server.fastmcp import FastMCP
+from mcp import SamplingMessage
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.session import ServerSession
+from mcp.types import TextContent
 
 # Initialize FastMCP server
 mcp = FastMCP("calculator")
 
 
 @mcp.tool()
-async def add(a: float, b: float) -> str:
+async def add(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
     """Add two numbers together.
 
     Args:
@@ -20,11 +23,12 @@ async def add(a: float, b: float) -> str:
         b: Second number
     """
     result = a + b
+    await ctx.info(f"Adding {a} and {b} = {result}")
     return f"{a} + {b} = {result}"
 
 
 @mcp.tool()
-async def subtract(a: float, b: float) -> str:
+async def subtract(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
     """Subtract the second number from the first.
 
     Args:
@@ -32,11 +36,12 @@ async def subtract(a: float, b: float) -> str:
         b: Number to subtract
     """
     result = a - b
+    await ctx.info(f"Subtracting {a} and {b} = {result}")
     return f"{a} - {b} = {result}"
 
 
 @mcp.tool()
-async def multiply(a: float, b: float) -> str:
+async def multiply(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
     """Multiply two numbers together.
 
     Args:
@@ -44,11 +49,12 @@ async def multiply(a: float, b: float) -> str:
         b: Second number
     """
     result = a * b
+    await ctx.info(f"Multiplying {a} and {b} = {result}")
     return f"{a} × {b} = {result}"
 
 
 @mcp.tool()
-async def divide(a: float, b: float) -> str:
+async def divide(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
     """Divide the first number by the second.
 
     Args:
@@ -59,11 +65,12 @@ async def divide(a: float, b: float) -> str:
         return "Error: Division by zero is not allowed"
 
     result = a / b
+    await ctx.info(f"Dividing {a} by {b} = {result}")
     return f"{a} ÷ {b} = {result}"
 
 
 @mcp.tool()
-async def power(base: float, exponent: float) -> str:
+async def power(base: float, exponent: float, ctx: Context[ServerSession, None]) -> str:
     """Raise a number to a power.
 
     Args:
@@ -72,13 +79,14 @@ async def power(base: float, exponent: float) -> str:
     """
     try:
         result = base**exponent
+        await ctx.info(f"Raising {base} to the power of {exponent} = {result}")
         return f"{base}^{exponent} = {result}"
     except Exception as e:
         return f"Error calculating power: {str(e)}"
 
 
 @mcp.tool()
-async def square_root(number: float) -> str:
+async def square_root(number: float, ctx: Context[ServerSession, None]) -> str:
     """Calculate the square root of a number.
 
     Args:
@@ -88,18 +96,47 @@ async def square_root(number: float) -> str:
         return "Error: Cannot calculate square root of negative number"
 
     result = math.sqrt(number)
+    await ctx.info(f"Calculating the square root of {number} = {result}")
     return f"√{number} = {result}"
 
 
 @mcp.tool()
-async def count_rs(text: str) -> str:
+async def count_rs(text: str, ctx: Context[ServerSession, None]) -> str:
     """Count all occurrences of the letter 'R' (case-insensitive) in the input string.
 
     Args:
         text: The input string to search for the letter 'R'
     """
     count = text.upper().count("R")
+    await ctx.info(f"Counting the letter 'R' in '{text}' = {count}")
     return f"The letter 'R' appears {count} times in: '{text}'"
+
+
+@mcp.tool()
+async def explain_math(operation: str, ctx: Context[ServerSession, None]) -> str:
+    """Use sampling to explain how a mathematical operation works."""
+    prompt = f"""
+    Explain how the following mathematical operation works. Break it down into 
+    discrete steps and explain any relevant concepts. The operation is: {operation}.
+    """
+
+    result = await ctx.session.create_message(
+        messages=[
+            SamplingMessage(
+                role="user",
+                content=TextContent(type="text", text=prompt),
+            )
+        ],
+        max_tokens=100,
+    )
+    ctx.log.info("Sending math explanation to LLM")
+    if not result.content:
+        ctx.log.warning("No content in result")
+        return "No content in result"
+
+    if result.content.type == "text":
+        return result.content.text
+    return str(result.content)
 
 
 @mcp.resource("resource://math-constants")
@@ -122,7 +159,6 @@ async def math_constants() -> str:
 
     result = "Mathematical Constants:\n"
     result += "=" * 25 + "\n\n"
-
     for name, value in constants.items():
         result += f"{name:<25} = {value:.10f}\n"
 

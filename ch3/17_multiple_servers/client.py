@@ -1,10 +1,10 @@
 import logging
-from contextlib import AsyncExitStack
 from typing import Any
 
 from anthropic import Anthropic
+from internal_tool import InternalTool
 from mcp import ClientSession
-from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.session_group import ClientSessionGroup, ServerParameters
 from mcp.shared.context import RequestContext
 from mcp.types import (
     BlobResourceContents,
@@ -27,19 +27,22 @@ class MCPClient:
     def __init__(
         self,
         name: str,
-        command: str,
-        server_args: list[str],
         llm_client: Anthropic,
-        env_vars: dict[str, str] = None,
     ) -> None:
         self.name = name
-        self.command = command
-        self.server_args = server_args
-        self.env_vars = env_vars
-        self._session: ClientSession = None
-        self._exit_stack: AsyncExitStack = AsyncExitStack()
-        self._connected: bool = False
         self._llm_client = llm_client
+        self._session_group = ClientSessionGroup()
+
+    @property
+    def _connected(self) -> bool:
+        return True if self._session_group.sessions else False
+
+    @property
+    def _session(self) -> ClientSession:
+        """Get the first available session from the session group."""
+        if not self._session_group.sessions:
+            raise RuntimeError("No active sessions")
+        return self._session_group.sessions[0]
 
     async def _handle_logs(self, params: LoggingMessageNotificationParams) -> None:
         """
@@ -61,14 +64,10 @@ class MCPClient:
         messages = []
         for message in params.messages:
             if isinstance(message.content, TextContent):
-                messages.append(
-                    {"role": message.role, "content": message.content.text}
-                )
+                messages.append({"role": message.role, "content": message.content.text})
             else:
                 # Handle other content types if needed
-                messages.append(
-                    {"role": message.role, "content": str(message.content)}
-                )
+                messages.append({"role": message.role, "content": str(message.content)})
 
         response = self._llm_client.messages.create(
             max_tokens=params.maxTokens,
@@ -98,38 +97,14 @@ class MCPClient:
             role=response.role, content=content_data, model="claude-sonnet-4-0"
         )
 
-    async def connect(self) -> None:
+    async def connect(self, server_parameters: ServerParameters) -> None:
         """
         Connect to the server set in the constructor.
         """
         if self._connected:
             raise RuntimeError("Client is already connected")
 
-        server_parameters = StdioServerParameters(
-            command=self.command,
-            args=self.server_args,
-            env=self.env_vars if self.env_vars else None,
-        )
-
-        # Connect to stdio server, starting subprocess
-        stdio_connection = await self._exit_stack.enter_async_context(
-            stdio_client(server_parameters)
-        )
-        self.read, self.write = stdio_connection
-
-        # Start MCP client session
-        self._session = await self._exit_stack.enter_async_context(
-            ClientSession(
-                read_stream=self.read,
-                write_stream=self.write,
-                logging_callback=self._handle_logs,
-                sampling_callback=self._handle_sampling,
-            ),
-        )
-
-        # Initialize session
-        await self._session.initialize()
-        self._connected = True
+        await self._session_group.connect_to_server(server_params=server_parameters)
 
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None
@@ -213,11 +188,11 @@ class MCPClient:
         if not tools_result.tools:
             logger.warning("No tools found on server")
         available_tools = [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.inputSchema,
-            }
+            InternalTool(
+                name=tool.name,
+                description=tool.description,
+                input_schema=tool.inputSchema,
+            )
             for tool in tools_result.tools
         ]
         return available_tools
@@ -235,7 +210,5 @@ class MCPClient:
         """
         Clean up any resources
         """
-        if self._exit_stack:
-            await self._exit_stack.aclose()
-            self._connected = False
-            self._session = None
+        for session in self._session_group.sessions:
+            await self._session_group.disconnect_from_server(session)

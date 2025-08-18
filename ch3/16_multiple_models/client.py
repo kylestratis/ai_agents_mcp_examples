@@ -20,6 +20,8 @@ from mcp.types import (
     TextResourceContents,
 )
 
+from internal_tool import InternalTool
+
 logger = logging.getLogger(__name__)
 
 
@@ -213,11 +215,11 @@ class MCPClient:
         if not tools_result.tools:
             logger.warning("No tools found on server")
         available_tools = [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.inputSchema,
-            }
+            InternalTool(
+                name=tool.name,
+                description=tool.description,
+                input_schema=tool.inputSchema,
+            )
             for tool in tools_result.tools
         ]
         return available_tools

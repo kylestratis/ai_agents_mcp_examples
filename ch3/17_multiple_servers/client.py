@@ -33,17 +33,6 @@ class MCPClient:
         self._llm_client = llm_client
         self._session_group = ClientSessionGroup()
 
-    @property
-    def _connected(self) -> bool:
-        return True if self._session_group.sessions else False
-
-    @property
-    def _session(self) -> ClientSession:
-        """Get the first available session from the session group."""
-        if not self._session_group.sessions:
-            raise RuntimeError("No active sessions")
-        return self._session_group.sessions[0]
-
     async def _handle_logs(self, params: LoggingMessageNotificationParams) -> None:
         """
         Log handler that simply prints log messages to the console, implementing the
@@ -101,18 +90,16 @@ class MCPClient:
         """
         Connect to the server set in the constructor.
         """
-        if self._connected:
-            raise RuntimeError("Client is already connected")
 
         await self._session_group.connect_to_server(server_params=server_parameters)
 
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None
     ) -> list[str]:
-        if not self._connected:
+        if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
 
-        tool_call_result = await self._session.call_tool(
+        tool_call_result = await self._session_group.call_tool(
             name=tool_name, arguments=arguments
         )
         logger.debug(f"Calling tool {tool_name} with arguments {arguments}")
@@ -139,7 +126,7 @@ class MCPClient:
     ) -> list[BlobResourceContents | TextResourceContents]:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
-        resource_read_result = await self._session.read_resource(uri=uri)
+        resource_read_result = await self._session_group.read_resource(uri=uri)
 
         if not resource_read_result.contents:
             logger.warning(f"No content read for resource URI {uri}")
@@ -150,7 +137,7 @@ class MCPClient:
     ) -> list[PromptMessage]:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
-        prompt_load_result = await self._session.get_prompt(
+        prompt_load_result = await self._session_group.get_prompt(
             name=name, arguments=arguments
         )
 
@@ -166,7 +153,7 @@ class MCPClient:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 
-        resources_result = await self._session.list_resources()
+        resources_result = await self._session_group.list_resources()
         if not resources_result.resources:
             logger.warning("No resources found on server")
         return resources_result.resources
@@ -175,7 +162,7 @@ class MCPClient:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 
-        resource_templates_result = await self._session.list_resource_templates()
+        resource_templates_result = await self._session_group.list_resource_templates()
         if not resource_templates_result.resources:
             logger.warning("No resource templates found on server")
         return resource_templates_result.resources
@@ -184,7 +171,7 @@ class MCPClient:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 
-        tools_result = await self._session.list_tools()
+        tools_result = await self._session_group.list_tools()
         if not tools_result.tools:
             logger.warning("No tools found on server")
         available_tools = [
@@ -201,7 +188,7 @@ class MCPClient:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 
-        prompt_result = await self._session.list_prompts()
+        prompt_result = await self._session_group.list_prompts()
         if not prompt_result.prompts:
             logger.warning("No prompts found on server")
         return prompt_result.prompts

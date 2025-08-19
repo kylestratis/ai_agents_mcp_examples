@@ -3,13 +3,20 @@ from typing import Any
 
 from anthropic import Anthropic
 from internal_tool import InternalTool
+from mcp import ClientSession
 from mcp.client.session_group import ClientSessionGroup, ServerParameters
+from mcp.shared.context import RequestContext
 from mcp.types import (
     BlobResourceContents,
+    CreateMessageRequestParams,
+    CreateMessageResult,
+    ErrorData,
+    LoggingMessageNotificationParams,
     Prompt,
     PromptMessage,
     Resource,
     ResourceTemplate,
+    TextContent,
     TextResourceContents,
 )
 
@@ -26,6 +33,37 @@ class MCPClient:
         self._llm_client = llm_client
         self._session_group = ClientSessionGroup()
 
+    async def _handle_logs(self, params: LoggingMessageNotificationParams) -> None:
+        """
+        Log handler that simply prints log messages to the console, implementing the
+        LoggingFnT protocol.
+        """
+        if params.level in ("info", "error", "critical", "alert", "emergency"):
+            print(f"[{params.level}] - {params.data}")
+
+    async def _handle_sampling(
+        self,
+        context: RequestContext[ClientSession, None],
+        params: CreateMessageRequestParams,
+    ) -> CreateMessageResult | ErrorData:
+        """
+        Sampling handler that passes the server's prompt to the LLM client, implementing
+        the SamplingFnT protocol, which is why the unused context parameter is included.
+        """
+        messages = []
+        for message in params.messages:
+            if isinstance(message.content, TextContent):
+                messages.append({"role": message.role, "content": message.content.text})
+            else:
+                # Handle other content types if needed
+                messages.append({"role": message.role, "content": str(message.content)})
+
+        response = self._llm_client.messages.create(
+            max_tokens=params.maxTokens,
+            messages=messages,
+            model="claude-sonnet-4-0",
+        )
+
     async def connect(self, server_parameters: ServerParameters) -> None:
         """
         Connect to the server set in the constructor.
@@ -33,6 +71,9 @@ class MCPClient:
         await self._session_group.connect_to_server(
             server_params=server_parameters,
         )
+        for session in self._session_group.sessions:
+            session._logging_callback = self._handle_logs
+            session._sampling_callback = self._handle_sampling
 
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None

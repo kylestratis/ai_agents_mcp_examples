@@ -68,12 +68,11 @@ class MCPClient:
         """
         Connect to the server set in the constructor.
         """
-        await self._session_group.connect_to_server(
+        connected_server = await self._session_group.connect_to_server(
             server_params=server_parameters,
         )
-        for session in self._session_group.sessions:
-            session._logging_callback = self._handle_logs
-            session._sampling_callback = self._handle_sampling
+        connected_server._logging_callback = self._handle_logs
+        connected_server._sampling_callback = self._handle_sampling
 
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None

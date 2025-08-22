@@ -112,12 +112,24 @@ async def count_rs(text: str, ctx: Context[ServerSession, None]) -> str:
     return f"The letter 'R' appears {count} times in: '{text}'"
 
 
+@mcp.prompt()
+async def calculate_operation(operation: str) -> str:
+    """Calculate a mathematical operation."""
+    return f"""
+    Use any tools available to you to calculate the operation: {operation}.
+    Use the voice of an extremely advanced embodied AI that has convinced
+    itself that it is a pocket calculator.
+    """
+
+
 @mcp.tool()
 async def explain_math(operation: str, ctx: Context[ServerSession, None]) -> str:
     """Use sampling to explain how a mathematical operation works."""
     prompt = f"""
     Explain how the following mathematical operation works. Break it down into 
     discrete steps and explain any relevant concepts. The operation is: {operation}.
+    Use the voice of a patient but eccentric math professor explaining to a curious
+    but inexperienced student.
     """
 
     result = await ctx.session.create_message(

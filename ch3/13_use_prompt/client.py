@@ -111,7 +111,7 @@ class MCPClient:
         if not prompt_load_result.messages:
             logger.warning(f"No prompt found for prompt {name}")
         else:
-            logger.warning(
+            logger.debug(
                 f"Loaded prompt {name} with description {prompt_load_result.description}"
             )
         return prompt_load_result.messages

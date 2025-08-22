@@ -8,6 +8,7 @@ from typing import Any
 from anthropic import Anthropic
 from client import MCPClient
 from dotenv import load_dotenv
+from internal_tool import InternalTool
 from mcp.types import TextResourceContents
 
 load_dotenv()
@@ -204,7 +205,12 @@ Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"
                 "Welcome to your AI Assistant. Type 'goodbye' to quit or 'refresh' to reload and redisplay available resources."
             )
             await self.mcp_client.connect()
-            available_tools = await self.mcp_client.get_available_tools()
+            available_tools: list[
+                InternalTool
+            ] = await self.mcp_client.get_available_tools()
+            available_tools: list[dict[str, str]] = [
+                tool.translate_to_anthropic() for tool in available_tools
+            ]
             await self._refresh()
 
             print(

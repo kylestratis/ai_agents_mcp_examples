@@ -67,27 +67,28 @@ Example: ["math-constants"] or []
 
         return []
 
-    async def _select_prompts(self, user_query: str) -> list[str]:
+    async def _select_prompts(self, user_query: str) -> list[dict[str, Any]]:
         """Use LLM to intelligently select relevant prompts."""
         if not self.available_prompts:
             return []
 
-        prompt_descriptions = {
-            name: prompt.description or f"Prompt: {name}"
-            for name, prompt in self.available_prompts.items()
-        }
+        prompts = [
+            prompt.model_dump_json() for prompt in self.available_prompts.values()
+        ]
 
         selection_prompt = f"""
 Given this user question: "{user_query}"
 
 And these available prompt templates:
-{json.dumps(prompt_descriptions, indent=2)}
+{json.dumps(prompts, indent=2)}
 
 Which prompts (if any) would provide helpful instructions or guidance for answering this question?
-Return a JSON array of prompt names, or an empty array if no prompts are needed.
-Only include prompts that are directly relevant.
+Return a JSON array of prompt objects which have a name (string) and arguments (objects where the 
+keys are the named parameter name and value is the argument value), or an empty array if no prompts
+are needed. Only include prompts that are directly relevant.
 
-Example: ["calculation-helper", "step-by-step-math"] or []
+Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"}}]}},
+ {{"name": "step-by-step-math", "arguments": {{}}}}] or []
 """
 
         try:
@@ -103,7 +104,9 @@ Example: ["calculation-helper", "step-by-step-math"] or []
                 end = response_text.rfind("]") + 1
                 json_part = response_text[start:end]
                 selected_prompts = json.loads(json_part)
-                return [p for p in selected_prompts if p in self.available_prompts]
+                return [
+                    p for p in selected_prompts if p["name"] in self.available_prompts
+                ]
 
         except Exception as e:
             logger.warning(f"Failed to select prompts with LLM: {e}")
@@ -157,21 +160,21 @@ Example: ["calculation-helper", "step-by-step-math"] or []
 
         return context_messages
 
-    async def _load_selected_prompts(self, prompt_names: list[str]) -> str:
+    async def _load_selected_prompts(self, prompts: list[dict[str, Any]]) -> str:
         """Load the specified prompts as system instructions."""
         system_instructions = []
 
-        for prompt_name in prompt_names:
-            if prompt_name in self.available_prompts:
-                print(f"Using prompt: {prompt_name}")
+        for prompt in prompts:
+            if prompt["name"] in self.available_prompts:
+                print(f"Using prompt: {prompt['name']}")
                 try:
                     prompt_content = await self.mcp_client.load_prompt(
-                        name=prompt_name, arguments={}
+                        name=prompt["name"], arguments=prompt["arguments"]
                     )
 
                     # Extract the prompt text
                     prompt_text = ""
-                    for message in prompt_content.messages:
+                    for message in prompt_content:
                         if hasattr(message.content, "text"):
                             prompt_text += message.content.text + "\n"
                         elif isinstance(message.content, str):
@@ -179,11 +182,11 @@ Example: ["calculation-helper", "step-by-step-math"] or []
 
                     if prompt_text.strip():
                         system_instructions.append(
-                            f"[Prompt: {prompt_name}]\n{prompt_text.strip()}"
+                            f"[Prompt: {prompt['name']}]\n{prompt_text.strip()}"
                         )
 
                 except Exception as e:
-                    print(f"Error loading prompt {prompt_name}: {e}")
+                    print(f"Error loading prompt {prompt['name']}: {e}")
 
         return "\n\n".join(system_instructions)
 

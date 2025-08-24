@@ -11,16 +11,16 @@ from mcp.types import (
     CreateMessageRequestParams,
     CreateMessageResult,
     ErrorData,
+    ListRootsResult,
     LoggingMessageNotificationParams,
     Prompt,
     PromptMessage,
     Resource,
     ResourceTemplate,
+    Root,
     TextContent,
     TextResourceContents,
 )
-
-from internal_tool import InternalTool
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +33,13 @@ class MCPClient:
         server_args: list[str],
         llm_client: Anthropic,
         env_vars: dict[str, str] = None,
+        file_roots: list[str] = None,
     ) -> None:
         self.name = name
         self.command = command
         self.server_args = server_args
         self.env_vars = env_vars
+        self.file_roots = file_roots
         self._session: ClientSession = None
         self._exit_stack: AsyncExitStack = AsyncExitStack()
         self._connected: bool = False
@@ -63,14 +65,10 @@ class MCPClient:
         messages = []
         for message in params.messages:
             if isinstance(message.content, TextContent):
-                messages.append(
-                    {"role": message.role, "content": message.content.text}
-                )
+                messages.append({"role": message.role, "content": message.content.text})
             else:
                 # Handle other content types if needed
-                messages.append(
-                    {"role": message.role, "content": str(message.content)}
-                )
+                messages.append({"role": message.role, "content": str(message.content)})
 
         response = self._llm_client.messages.create(
             max_tokens=params.maxTokens,
@@ -100,6 +98,23 @@ class MCPClient:
             role=response.role, content=content_data, model="claude-sonnet-4-0"
         )
 
+    async def _handle_roots(
+        self,
+        context: RequestContext[ClientSession, Any],
+    ) -> ListRootsResult | ErrorData:
+        """
+        Roots handler that returns the file roots, implementing the RootsFnT protocol.
+        """
+        roots_result = []
+        for root in self.file_roots:
+            if not root.startswith("file:///"):
+                logger.warning(f"Root {root} does not start with file:///, ignoring")
+            else:
+                roots_result.append(Root(uri=root))
+        if roots_result is None:
+            return ErrorData(code=-32602, message="No valid file roots provided")
+        return ListRootsResult(roots=roots_result)
+
     async def connect(self) -> None:
         """
         Connect to the server set in the constructor.
@@ -126,6 +141,7 @@ class MCPClient:
                 write_stream=self.write,
                 logging_callback=self._handle_logs,
                 sampling_callback=self._handle_sampling,
+                list_roots_callback=self._handle_roots,
             ),
         )
 
@@ -215,11 +231,11 @@ class MCPClient:
         if not tools_result.tools:
             logger.warning("No tools found on server")
         available_tools = [
-            InternalTool(
-                name=tool.name,
-                description=tool.description,
-                input_schema=tool.inputSchema,
-            )
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.inputSchema,
+            }
             for tool in tools_result.tools
         ]
         return available_tools

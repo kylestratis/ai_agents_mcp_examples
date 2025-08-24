@@ -334,6 +334,9 @@ async def main():
     mcp_client = MCPClient(
         name="calculator_multi_client",
         llm_client=anthropic_client,
+        file_roots=[
+            f"file:///{str(Path(__file__).parent.resolve())}",
+        ],
     )
     await mcp_client.connect(calculator_server_parameters)
     agent = Agent(mcp_client, anthropic_client)

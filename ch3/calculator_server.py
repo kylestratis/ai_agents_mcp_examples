@@ -4,11 +4,13 @@ Provides mathematical operations as tools for calculation tasks.
 """
 
 import math
+import os
 
 from mcp import SamplingMessage
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 from mcp.types import TextContent
+from pydantic import FileUrl
 
 # Initialize FastMCP server
 mcp = FastMCP("calculator")
@@ -141,14 +143,48 @@ async def explain_math(operation: str, ctx: Context[ServerSession, None]) -> str
         ],
         max_tokens=100,
     )
-    ctx.log.info("Sending math explanation to LLM")
+    await ctx.info("Sending math explanation to LLM")
     if not result.content:
-        ctx.log.warning("No content in result")
+        await ctx.warning("No content in result")
         return "No content in result"
 
     if result.content.type == "text":
         return result.content.text
     return str(result.content)
+
+
+@mcp.tool()
+async def count_files(file_path: str, ctx: Context[ServerSession, None]) -> str:
+    """Count files in a given directory."""
+    roots_result = await ctx.session.list_roots()
+    root_uris: list[FileUrl] = [root.uri for root in roots_result.roots]
+
+    # Quick validation using string matching (less robust but simpler)
+    file_path_abs = os.path.abspath(file_path)
+    is_allowed = False
+
+    for root_uri in root_uris:
+        absolute_root_path = os.path.abspath(root_uri.path)
+        if file_path_abs.startswith(absolute_root_path):
+            is_allowed = True
+            break
+
+    if not is_allowed:
+        error_msg = (
+            f"Access denied: {file_path} is not within allowed roots {root_uris}"
+        )
+        await ctx.error(error_msg)
+        raise ValueError(error_msg)
+
+    # Validate directory exists
+    if not os.path.isdir(file_path):
+        error_msg = f"Path {file_path} is not a valid directory"
+        await ctx.error(error_msg)
+        raise NotADirectoryError(error_msg)
+
+    count = len(os.listdir(file_path))
+    await ctx.info(f"Counting files in {file_path} = {count}")
+    return f"There are {count} files in {file_path}"
 
 
 @mcp.resource("resource://math-constants")

@@ -11,11 +11,13 @@ from mcp.types import (
     CreateMessageRequestParams,
     CreateMessageResult,
     ErrorData,
+    ListRootsResult,
     LoggingMessageNotificationParams,
     Prompt,
     PromptMessage,
     Resource,
     ResourceTemplate,
+    Root,
     TextContent,
     TextResourceContents,
 )
@@ -28,8 +30,10 @@ class MCPClient:
         self,
         name: str,
         llm_client: Anthropic,
+        file_roots: list[str] = None,
     ) -> None:
         self.name = name
+        self.file_roots = file_roots
         self._llm_client = llm_client
         self._session_group = ClientSessionGroup()
 
@@ -64,6 +68,23 @@ class MCPClient:
             model="claude-sonnet-4-0",
         )
 
+    async def _handle_roots(
+        self,
+        context: RequestContext[ClientSession, Any],
+    ) -> ListRootsResult | ErrorData:
+        """
+        Roots handler that returns the file roots, implementing the RootsFnT protocol.
+        """
+        roots_result = []
+        for root in self.file_roots:
+            if not root.startswith("file:///"):
+                logger.warning(f"Root {root} does not start with file:///, ignoring")
+            else:
+                roots_result.append(Root(uri=root))
+        if roots_result is None:
+            return ErrorData(code=-32602, message="No valid file roots provided")
+        return ListRootsResult(roots=roots_result)
+
     async def connect(self, server_parameters: ServerParameters) -> None:
         """
         Connect to the server set in the constructor.
@@ -73,6 +94,7 @@ class MCPClient:
         )
         connected_server._logging_callback = self._handle_logs
         connected_server._sampling_callback = self._handle_sampling
+        connected_server._list_roots_callback = self._handle_roots
 
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None

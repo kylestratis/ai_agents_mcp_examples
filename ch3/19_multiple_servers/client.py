@@ -235,6 +235,7 @@ class MCPClient:
         connected_server._logging_callback = self._handle_logs
         connected_server._sampling_callback = self._handle_sampling
         connected_server._list_roots_callback = self._handle_roots
+        connected_server._elicitation_callback = self._handle_elicitation
 
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None

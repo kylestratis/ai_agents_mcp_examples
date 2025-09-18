@@ -34,7 +34,7 @@ async def generate_report_card_image(report_card: ReportCard) -> Image:
     """
     image = PILImage.new("RGB", (400, 200), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
-    draw.text((10, 10), report_card.name, fill=(0, 0, 0))
+    draw.text((100, 100), report_card.name, fill=(0, 0, 0))
     return Image(data=image.tobytes())
 
 

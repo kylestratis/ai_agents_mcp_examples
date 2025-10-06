@@ -57,7 +57,7 @@ class MCPClient:
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None
     ) -> list[str]:
-        """Given a tool name and optionally a list of argumnents, execute the tool."""
+        """Given a tool name and optionally a list of arguments, execute the tool."""
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 

@@ -10,17 +10,18 @@ from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.types import Tool
 
-logs = []
-
 
 @asynccontextmanager
-async def lifespan(server: Server) -> AsyncGenerator[list[str]]:
+async def lifespan(server: Server) -> AsyncGenerator[dict[str, list[str]]]:
+    logs = []
     logs.append(f"{datetime.now()}: Server started")
+    print(logs[-1], file=sys.stderr)
     try:
-        logs.append(f"{datetime.now()}: logs retrieved")
-        yield logs
+        logs.append(f"{datetime.now()}: logs yielded")
+        yield {"logs": logs}
     finally:
-        print("goodbye", file=sys.stderr)
+        logs.append(f"{datetime.now()}: Server stopped, printing all logs")
+        print(logs, file=sys.stderr)
 
 
 # Create a server instance
@@ -31,8 +32,11 @@ server = Server("low-level-server", lifespan=lifespan)
 async def list_tools() -> list[Tool]:
     """List all tools available on the server."""
     ctx = server.request_context
-    print(ctx.lifespan_context[-1], file=sys.stderr)
+    logs = ctx.lifespan_context["logs"]
     print(logs[-1], file=sys.stderr)
+    logs.append(f"{datetime.now()}: list_tools called")
+    print(logs[-1], file=sys.stderr)
+
     return [
         Tool(
             name="add",
@@ -40,8 +44,14 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "a": {"type": "number", "description": "The first number to add"},
-                    "b": {"type": "number", "description": "The second number to add"},
+                    "a": {
+                        "type": "number",
+                        "description": "The first number to add",
+                    },
+                    "b": {
+                        "type": "number",
+                        "description": "The second number to add",
+                    },
                 },
                 "required": ["a", "b"],
             },
@@ -79,14 +89,14 @@ async def add(name: str, args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"Unknown tool: {name}")
     result = {"augend": args["a"], "addend": args["b"], "sum": args["a"] + args["b"]}
     ctx = server.request_context
-    logs = ctx.lifespan_context[-1]
-    print(logs, file=sys.stderr)
+    logs = ctx.lifespan_context["logs"]
+    logs.append(f"{datetime.now()}: add called")
+    print(logs[-1], file=sys.stderr)
     return result
 
 
 async def run():
     print("Running low-level server", file=sys.stderr)
-    print(logs, file=sys.stderr)
     initialization_options = InitializationOptions(
         server_name="low-level-server",
         server_version="0.1.0",

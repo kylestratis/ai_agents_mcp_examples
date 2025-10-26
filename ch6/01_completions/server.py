@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -42,10 +41,9 @@ async def simple_completion(
     context: CompletionContext | None,
 ) -> Completion:
     """Returns potential completions for a given reference and argument."""
-    completion = Completion(values=[], total=0, hasMore=False)
+    suggested = []
     prompt_default_suggestions = ["user"]
     resource_template_default_suggestions = ["1.txt", "2.png"]
-    print(context, file=sys.stderr)
     if isinstance(ref, PromptReference):
         if ref.name == "simple_prompt_input":
             suggested = [
@@ -61,9 +59,6 @@ async def simple_completion(
                         if argument.value.lower() in prev.lower()
                     ]
                 )
-            completion = Completion(
-                values=suggested, total=len(suggested), hasMore=False
-            )
     else:
         if ref.uri == "file:///{filename}":
             suggested = [
@@ -79,7 +74,7 @@ async def simple_completion(
                         if argument.value.lower() in prev.lower()
                     ]
                 )
-            completion = Completion(values=suggested, total=2, hasMore=False)
+    completion = Completion(values=suggested, total=len(suggested), hasMore=False)
     return completion
 
 

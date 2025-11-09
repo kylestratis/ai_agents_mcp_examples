@@ -60,7 +60,9 @@ Example: ["math-constants"] or []
                 end = response_text.rfind("]") + 1
                 json_part = response_text[start:end]
                 selected_resources = json.loads(json_part)
-                return [r for r in selected_resources if r in self.available_resources]
+                return [
+                    r for r in selected_resources if r in self.available_resources
+                ]
 
         except Exception as e:
             logger.warning(f"Failed to select resources with LLM: {e}")

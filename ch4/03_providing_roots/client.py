@@ -65,10 +65,14 @@ class MCPClient:
         messages = []
         for message in params.messages:
             if isinstance(message.content, TextContent):
-                messages.append({"role": message.role, "content": message.content.text})
+                messages.append(
+                    {"role": message.role, "content": message.content.text}
+                )
             else:
                 # Handle other content types if needed
-                messages.append({"role": message.role, "content": str(message.content)})
+                messages.append(
+                    {"role": message.role, "content": str(message.content)}
+                )
 
         response = self._llm_client.messages.create(
             max_tokens=params.maxTokens,

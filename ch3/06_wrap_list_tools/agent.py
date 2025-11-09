@@ -31,7 +31,9 @@ async def main():
     """Main async function to run the assistant."""
     await mcp_client.connect()
     available_tools = await mcp_client.get_available_tools()
-    print(f"Available tools: {", ".join([tool['name'] for tool in available_tools])}")
+    print(
+        f"Available tools: {", ".join([tool['name'] for tool in available_tools])}"
+    )
     while True:
         prompt = input("You: ")
         if prompt.lower() == "goodbye":

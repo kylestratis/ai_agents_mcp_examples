@@ -63,7 +63,10 @@ async def signup_math_facts(ctx: Context[ServerSession, None]) -> str:
         response += f"We'll send interesting mathematical tidbits to {email}.\n"
 
         if age:
-            response += f"Thanks for sharing that you're {age} years old - we'll tailor the content accordingly!\n"
+            response += (
+                f"Thanks for sharing that you're {age} years old - "
+                "we'll tailor the content accordingly!\n"
+            )
 
         response += "\nYou'll receive your first math fact soon!"
         response += (
@@ -74,11 +77,17 @@ async def signup_math_facts(ctx: Context[ServerSession, None]) -> str:
 
     elif elicit_result.action == "decline":
         await ctx.info("User declined math facts signup")
-        return "No problem! You've chosen not to sign up for math facts. You can always use our calculation tools anytime!"
+        return (
+            "No problem! You've chosen not to sign up for math facts. "
+            "You can always use our calculation tools anytime!"
+        )
 
     elif elicit_result.action == "cancel":
         await ctx.info("User cancelled math facts signup")
-        return "Signup cancelled. Feel free to try again later or use our other mathematical tools!"
+        return (
+            "Signup cancelled. Feel free to try again later or "
+            "use our other mathematical tools!"
+        )
 
     else:
         await ctx.warning(f"Unexpected elicitation action: {elicit_result.action}")

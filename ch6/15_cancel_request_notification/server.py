@@ -21,13 +21,18 @@ async def handle_cancelled_notification(
 ) -> None:
     """Handle cancellation notifications from the client."""
     logger.info(
-        f"Cancelled notification received for request ID {notification.params.requestId}: {notification.params.reason}"
+        (
+            f"Cancelled notification received for request ID "
+            f"{notification.params.requestId}: {notification.params.reason}"
+        )
     )
 
 
 @mcp.tool()
 async def sampling_with_timeout(ctx: Context[ServerSession, None]) -> str:
-    """Perform a sampling request with a timeout, sending cancellation if it expires."""
+    """
+    Perform a sampling request with a timeout, sending cancellation if it expires.
+    """
     if not ctx.session.client_params.capabilities.sampling:
         return "Error: Sampling is not supported by this client"
 
@@ -44,7 +49,10 @@ async def sampling_with_timeout(ctx: Context[ServerSession, None]) -> str:
                         role="user",
                         content=TextContent(
                             type="text",
-                            text="Write a very long, detailed essay about the history of mathematics.",
+                            text=(
+                                "Write a very long, detailed essay about "
+                                "the history of mathematics."
+                            ),
                         ),
                     )
                 ],
@@ -54,7 +62,10 @@ async def sampling_with_timeout(ctx: Context[ServerSession, None]) -> str:
                 ),
             )
             await ctx.info("Sampling completed successfully")
-            return f"Result: {str(result.content.text if result.content else 'No content')[:200]}..."
+            if result.content:
+                return f"Result: {result.content.text[:200]}..."
+            else:
+                return "No content in result"
 
     except TimeoutError:
         await ctx.warning(f"Sampling request {request_id} timed out after 5 seconds")

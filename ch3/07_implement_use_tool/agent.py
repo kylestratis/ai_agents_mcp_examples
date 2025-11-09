@@ -30,7 +30,9 @@ print("Welcome to your AI Assistant. Type 'goodbye' to quit.")
 async def main():
     """Main async function to run the assistant."""
     await mcp_client.connect()
-    available_tools = [tool["name"] for tool in await mcp_client.get_available_tools()]
+    available_tools = [
+        tool["name"] for tool in await mcp_client.get_available_tools()
+    ]
     print(f"Available tools: {available_tools}")
     while True:
         prompt = input("You: ")

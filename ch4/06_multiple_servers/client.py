@@ -60,10 +60,14 @@ class MCPClient:
         messages = []
         for message in params.messages:
             if isinstance(message.content, TextContent):
-                messages.append({"role": message.role, "content": message.content.text})
+                messages.append(
+                    {"role": message.role, "content": message.content.text}
+                )
             else:
                 # Handle other content types if needed
-                messages.append({"role": message.role, "content": str(message.content)})
+                messages.append(
+                    {"role": message.role, "content": str(message.content)}
+                )
 
         response = self._llm_client.messages.create(
             max_tokens=params.maxTokens,
@@ -110,7 +114,9 @@ class MCPClient:
                 description = field_info.get("description", "")
                 required = field_name in schema.get("required", [])
                 required_text = " (required)" if required else " (optional)"
-                print(f"  • {field_name} ({field_type}){required_text}: {description}")
+                print(
+                    f"  • {field_name} ({field_type}){required_text}: {description}"
+                )
         else:
             print("Schema:")
             print(json.dumps(schema, indent=2))
@@ -162,7 +168,9 @@ class MCPClient:
                             collected_data[field_name] = value
                         break
                     except ValueError:
-                        print(f"Error: Invalid {field_type} value. Please try again.")
+                        print(
+                            f"Error: Invalid {field_type} value. Please try again."
+                        )
         else:
             # Fallback for non-standard schemas
             print("Please provide data as JSON:")
@@ -306,7 +314,9 @@ class MCPClient:
         if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
 
-        resource_templates_result = await self._session_group.list_resource_templates()
+        resource_templates_result = (
+            await self._session_group.list_resource_templates()
+        )
         if not resource_templates_result.resources:
             logger.warning("No resource templates found on server")
         return resource_templates_result.resources

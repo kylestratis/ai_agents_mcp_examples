@@ -20,8 +20,14 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "a": {"type": "number", "description": "The first number to add"},
-                    "b": {"type": "number", "description": "The second number to add"},
+                    "a": {
+                        "type": "number",
+                        "description": "The first number to add",
+                    },
+                    "b": {
+                        "type": "number",
+                        "description": "The second number to add",
+                    },
                 },
                 "required": ["a", "b"],
             },

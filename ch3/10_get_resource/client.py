@@ -4,7 +4,12 @@ from typing import Any
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
-from mcp.types import Resource, ResourceContents, ResourceTemplate, TextResourceContents
+from mcp.types import (
+    Resource,
+    ResourceContents,
+    ResourceTemplate,
+    TextResourceContents,
+)
 
 logger = logging.getLogger(__name__)
 

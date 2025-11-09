@@ -13,7 +13,9 @@ class ReportCard(BaseModel):
 
 
 @mcp.tool()
-async def generate_report_card(name: str, grades: list[tuple[str, int]]) -> ReportCard:
+async def generate_report_card(
+    name: str, grades: list[tuple[str, int]]
+) -> ReportCard:
     """
     Generate a report card for a student.
 

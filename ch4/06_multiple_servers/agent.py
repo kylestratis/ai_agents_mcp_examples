@@ -62,7 +62,9 @@ Example: ["math-constants"] or []
                 end = response_text.rfind("]") + 1
                 json_part = response_text[start:end]
                 selected_resources = json.loads(json_part)
-                return [r for r in selected_resources if r in self.available_resources]
+                return [
+                    r for r in selected_resources if r in self.available_resources
+                ]
 
         except Exception as e:
             logger.warning(f"Failed to select resources with LLM: {e}")
@@ -107,7 +109,9 @@ Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"
                 json_part = response_text[start:end]
                 selected_prompts = json.loads(json_part)
                 return [
-                    p for p in selected_prompts if p["name"] in self.available_prompts
+                    p
+                    for p in selected_prompts
+                    if p["name"] in self.available_prompts
                 ]
 
         except Exception as e:
@@ -198,7 +202,9 @@ Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"
             resource.name: resource for resource in available_resources
         }
         available_prompts = await self.mcp_client.get_available_prompts()
-        self.available_prompts = {prompt.name: prompt for prompt in available_prompts}
+        self.available_prompts = {
+            prompt.name: prompt for prompt in available_prompts
+        }
 
     async def run(self):
         try:

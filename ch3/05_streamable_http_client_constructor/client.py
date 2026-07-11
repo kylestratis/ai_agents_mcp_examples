@@ -5,19 +5,11 @@ from mcp.client import Client
 
 
 class MCPClient:
-    def __init__(
-        self,
-        name: str,
-        command: str,
-        server_args: list[str],
-        env_vars: dict[str, str] | None = None,
-    ) -> None:
+    def __init__(self, name: str, server_url: str) -> None:
         self.name = name
-        self.command = command
-        self.server_args = server_args
-        self.env_vars = env_vars
+        self.server_url = server_url
         self._client: Client | None = None
-        self._exit_stack: AsyncExitStack = AsyncExitStack()
+        self._exit_stack = AsyncExitStack()
         self._connected: bool = False
 
     async def connect(self) -> None:

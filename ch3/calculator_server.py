@@ -1,19 +1,17 @@
 """
-Calculator MCP server using FastMCP.
+Calculator MCP server using MCPServer.
 Provides mathematical operations as tools for calculation tasks.
 """
 
 import math
 import os
 
-from mcp import SamplingMessage
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
-from mcp.types import TextContent
+from mcp.server.mcpserver import Context, MCPServer
+from mcp_types import SamplingMessage, TextContent
 from pydantic import FileUrl
 
-# Initialize FastMCP server
-mcp = FastMCP("calculator")
+# Initialize MCP server
+mcp = MCPServer("calculator")
 
 # Form schema for elicitation requests
 FORM_SCHEMA = {
@@ -44,7 +42,7 @@ FORM_SCHEMA = {
 
 
 @mcp.tool()
-async def add(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def add(a: float, b: float, ctx: Context) -> str:
     """Add two numbers together.
 
     Args:
@@ -57,7 +55,7 @@ async def add(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
 
 
 @mcp.tool()
-async def subtract(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def subtract(a: float, b: float, ctx: Context) -> str:
     """Subtract the second number from the first.
 
     Args:
@@ -70,7 +68,7 @@ async def subtract(a: float, b: float, ctx: Context[ServerSession, None]) -> str
 
 
 @mcp.tool()
-async def multiply(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def multiply(a: float, b: float, ctx: Context) -> str:
     """Multiply two numbers together.
 
     Args:
@@ -83,7 +81,7 @@ async def multiply(a: float, b: float, ctx: Context[ServerSession, None]) -> str
 
 
 @mcp.tool()
-async def divide(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def divide(a: float, b: float, ctx: Context) -> str:
     """Divide the first number by the second.
 
     Args:
@@ -100,7 +98,7 @@ async def divide(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
 
 @mcp.tool()
 async def power(
-    base: float, exponent: float, ctx: Context[ServerSession, None]
+    base: float, exponent: float, ctx: Context
 ) -> str:
     """Raise a number to a power.
 
@@ -117,7 +115,7 @@ async def power(
 
 
 @mcp.tool()
-async def square_root(number: float, ctx: Context[ServerSession, None]) -> str:
+async def square_root(number: float, ctx: Context) -> str:
     """Calculate the square root of a number.
 
     Args:
@@ -132,7 +130,7 @@ async def square_root(number: float, ctx: Context[ServerSession, None]) -> str:
 
 
 @mcp.tool()
-async def count_rs(text: str, ctx: Context[ServerSession, None]) -> str:
+async def count_rs(text: str, ctx: Context) -> str:
     """Count all occurrences of the letter 'R' (case-insensitive) in the input string.
 
     Args:
@@ -154,7 +152,7 @@ async def calculate_operation(operation: str) -> str:
 
 
 @mcp.tool()
-async def explain_math(operation: str, ctx: Context[ServerSession, None]) -> str:
+async def explain_math(operation: str, ctx: Context) -> str:
     """Use sampling to explain how a mathematical operation works."""
     prompt = f"""
     Explain how the following mathematical operation works. Break it down into 
@@ -183,13 +181,13 @@ async def explain_math(operation: str, ctx: Context[ServerSession, None]) -> str
 
 
 @mcp.tool()
-async def signup_math_facts(ctx: Context[ServerSession, None]) -> str:
+async def signup_math_facts(ctx: Context) -> str:
     """Sign up to receive daily math facts (demonstration of elicitation)."""
     # Make elicitation request to collect user information
     try:
         elicit_result = await ctx.session.elicit(
             message="Please provide your information to sign up for daily math facts!",
-            requestedSchema=FORM_SCHEMA,
+            requested_schema=FORM_SCHEMA,
         )
     except Exception as e:
         await ctx.error(f"Error during math facts signup: {str(e)}")
@@ -236,7 +234,7 @@ async def signup_math_facts(ctx: Context[ServerSession, None]) -> str:
 
 
 @mcp.tool()
-async def count_files(file_path: str, ctx: Context[ServerSession, None]) -> str:
+async def count_files(file_path: str, ctx: Context) -> str:
     """Count files in a given directory."""
     roots_result = await ctx.session.list_roots()
     root_uris: list[FileUrl] = [root.uri for root in roots_result.roots]

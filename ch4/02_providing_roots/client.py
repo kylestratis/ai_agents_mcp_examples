@@ -1,11 +1,8 @@
-import json
 import logging
-import webbrowser
 from contextlib import AsyncExitStack
 from typing import Any, Callable
 
 from anthropic import Anthropic
-from internal_tool import InternalTool
 from mcp.client import Client
 from mcp.client.session import ClientRequestContext
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -13,9 +10,6 @@ from mcp_types import (
     BlobResourceContents,
     CreateMessageRequestParams,
     CreateMessageResult,
-    ElicitRequestFormParams,
-    ElicitRequestURLParams,
-    ElicitResult,
     ErrorData,
     ListRootsResult,
     LoggingMessageNotificationParams,
@@ -124,168 +118,6 @@ class MCPClient:
             return ErrorData(code=-32602, message="No valid file roots provided")
         return ListRootsResult(roots=roots_result)
 
-    async def _handle_elicitation(
-        self,
-        context: ClientRequestContext,
-        params: ElicitRequestFormParams | ElicitRequestURLParams,
-    ) -> ElicitResult | ErrorData:
-        """
-        Elicitation handler that displays the server request to the user,
-        handles their accept/decline response, and collects form data or
-        opens a URL when accepted, implementing the ElicitationFnT protocol.
-        """
-        # Get the server name from the client instance
-        requesting_server = self.name
-
-        # Display the elicitation request to the user
-        print(f"\n{'=' * 60}")
-        print(f"ELICITATION REQUEST FROM SERVER: {requesting_server}")
-        print(f"{'=' * 60}")
-        print(f"Message: {params.message}")
-        print(f"{'=' * 60}")
-
-        # URL mode: consent first, then hand off to the browser
-        if isinstance(params, ElicitRequestURLParams):
-            return self._handle_url_elicitation(params)
-
-        # Form mode: get user input for accept/decline
-        while True:
-            user_response = (
-                input("\nDo you want to accept this request? (y/n/c for cancel): ")
-                .lower()
-                .strip()
-            )
-
-            if user_response in ["y", "yes", "accept"]:
-                print("Request accepted")
-                # Collect form data based on the schema
-                form_data = self._collect_form_data(params.requested_schema)
-                if form_data is not None:
-                    print("Form data collected successfully")
-                    return ElicitResult(action="accept", content=form_data)
-                else:
-                    print("Form data collection cancelled")
-                    return ElicitResult(action="cancel")
-            elif user_response in ["n", "no", "decline"]:
-                print("Request declined")
-                return ElicitResult(action="decline")
-            elif user_response in ["c", "cancel"]:
-                print("Request cancelled")
-                return ElicitResult(action="cancel")
-            else:
-                print(
-                    "Invalid response. Please enter 'y' (accept), "
-                    "'n' (decline), or 'c' (cancel)."
-                )
-
-    def _handle_url_elicitation(
-        self, params: ElicitRequestURLParams
-    ) -> ElicitResult:
-        """
-        Show the user the full URL, get explicit consent, and only
-        then open it. The interaction itself happens out of band.
-        """
-        print("The server is asking you to continue in your browser at:")
-        print(f"  {params.url}")
-        user_response = input("\nOpen this URL? (y/n): ").lower().strip()
-        if user_response in ["y", "yes"]:
-            webbrowser.open(str(params.url))
-            return ElicitResult(action="accept")
-        print("Request declined")
-        return ElicitResult(action="decline")
-
-    def _collect_form_data(self, schema: dict[str, Any]) -> dict[str, Any] | None:
-        """
-        Collect form data from the user based on the provided schema.
-
-        Args:
-            schema: The JSON schema defining the required fields
-
-        Returns:
-            Dictionary containing the collected form data, or None if cancelled
-        """
-        print(f"\n{'=' * 60}")
-        print("FORM DATA REQUIRED")
-        print(f"{'=' * 60}")
-
-        # Display schema information
-        if "properties" in schema:
-            print("Required fields:")
-            for field_name, field_info in schema["properties"].items():
-                field_type = field_info.get("type", "string")
-                description = field_info.get("description", "")
-                required = field_name in schema.get("required", [])
-                required_text = " (required)" if required else " (optional)"
-                print(
-                    f"  • {field_name} ({field_type}){required_text}: {description}"
-                )
-        else:
-            print("Schema:")
-            print(json.dumps(schema, indent=2))
-
-        print(f"{'=' * 60}")
-
-        collected_data = {}
-
-        # Collect data for each field in the schema
-        if "properties" in schema:
-            for field_name, field_info in schema["properties"].items():
-                field_type = field_info.get("type", "string")
-                description = field_info.get("description", "")
-                required = field_name in schema.get("required", [])
-
-                while True:
-                    prompt = f"\nEnter {field_name}"
-                    if description:
-                        prompt += f" ({description})"
-                    if not required:
-                        prompt += " [optional]"
-                    prompt += ": "
-
-                    value = input(prompt).strip()
-
-                    # Handle optional fields
-                    if not value and not required:
-                        break
-
-                    # Validate required fields
-                    if not value and required:
-                        print(f"Error: {field_name} is required")
-                        continue
-
-                    # Type conversion
-                    try:
-                        if field_type == "integer":
-                            collected_data[field_name] = int(value)
-                        elif field_type == "number":
-                            collected_data[field_name] = float(value)
-                        elif field_type == "boolean":
-                            collected_data[field_name] = value.lower() in [
-                                "true",
-                                "yes",
-                                "y",
-                                "1",
-                            ]
-                        else:  # string or any other type
-                            collected_data[field_name] = value
-                        break
-                    except ValueError:
-                        print(
-                            f"Error: Invalid {field_type} value. Please try again."
-                        )
-        else:
-            # Fallback for non-standard schemas
-            print("Please provide data as JSON:")
-            while True:
-                json_input = input("JSON data: ").strip()
-                try:
-                    collected_data = json.loads(json_input)
-                    break
-                except json.JSONDecodeError:
-                    print("Error: Invalid JSON. Please try again.")
-
-        return collected_data
-
     async def connect(self) -> None:
         """
         Connect to the server set in the constructor.
@@ -307,12 +139,11 @@ class MCPClient:
             logging_callback=self._handle_logs,
             sampling_callback=self._handle_sampling,
             list_roots_callback=self._handle_roots,
-            elicitation_callback=self._handle_elicitation,
         )
         await self._exit_stack.enter_async_context(self._client)
         self._connected = True
 
-    async def get_available_tools(self) -> list[InternalTool]:
+    async def get_available_tools(self) -> list[dict[str, Any]]:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 
@@ -320,11 +151,11 @@ class MCPClient:
         if not tools_result.tools:
             logger.warning("No tools found on server")
         available_tools = [
-            InternalTool(
-                name=tool.name,
-                description=tool.description,
-                input_schema=tool.input_schema,
-            )
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema,
+            }
             for tool in tools_result.tools
         ]
         return available_tools

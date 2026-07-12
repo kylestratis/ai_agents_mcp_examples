@@ -5,8 +5,8 @@ from contextlib import AsyncExitStack
 from typing import Any, Callable
 
 from anthropic import Anthropic
-from internal_tool import InternalTool
 from mcp.client import Client
+from mcp.client.caching import CacheConfig
 from mcp.client.session import ClientRequestContext
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp_types import (
@@ -304,6 +304,7 @@ class MCPClient:
         # Start the MCP client
         self._client = Client(
             transport,
+            cache=CacheConfig(default_ttl_ms=30_000),
             logging_callback=self._handle_logs,
             sampling_callback=self._handle_sampling,
             list_roots_callback=self._handle_roots,
@@ -312,7 +313,7 @@ class MCPClient:
         await self._exit_stack.enter_async_context(self._client)
         self._connected = True
 
-    async def get_available_tools(self) -> list[InternalTool]:
+    async def get_available_tools(self) -> list[dict[str, Any]]:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 
@@ -320,11 +321,11 @@ class MCPClient:
         if not tools_result.tools:
             logger.warning("No tools found on server")
         available_tools = [
-            InternalTool(
-                name=tool.name,
-                description=tool.description,
-                input_schema=tool.input_schema,
-            )
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema,
+            }
             for tool in tools_result.tools
         ]
         return available_tools

@@ -3,7 +3,10 @@ from typing import Any
 
 class InternalTool:
     def __init__(
-        self, name: str, input_schema: dict[str, Any], description: str | None = None
+        self,
+        name: str,
+        input_schema: dict[str, Any],
+        description: str | None = None,
     ) -> None:
         self.name = name
         self.input_schema = input_schema

@@ -19,3 +19,10 @@ line-length = 85
 
 [tool.uv]
 prerelease = "allow"
+
+# 2.0.0b1 on PyPI predates the Resolve helpers for sampling and roots
+# (Sample, ListRoots). Pin to the audited SDK rev until the next beta or
+# the stable release lands, then remove these sources.
+[tool.uv.sources]
+mcp = { git = "https://github.com/modelcontextprotocol/python-sdk", rev = "1216c53" }
+mcp-types = { git = "https://github.com/modelcontextprotocol/python-sdk", rev = "1216c53", subdirectory = "src/mcp-types" }

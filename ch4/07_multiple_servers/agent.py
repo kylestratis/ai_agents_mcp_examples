@@ -9,8 +9,8 @@ from anthropic import Anthropic
 from client import MCPClient
 from dotenv import load_dotenv
 from internal_tool import InternalTool
-from mcp import StdioServerParameters
-from mcp.types import TextResourceContents
+from mcp.client.stdio import StdioServerParameters
+from mcp_types import TextResourceContents
 
 load_dotenv()
 
@@ -53,7 +53,7 @@ Example: ["math-constants"] or []
             response = self.anthropic_client.messages.create(
                 max_tokens=200,
                 messages=[{"role": "user", "content": selection_prompt}],
-                model="claude-sonnet-4-0",
+                model="claude-sonnet-5",
             )
 
             response_text = response.content[0].text.strip()
@@ -99,7 +99,7 @@ Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"
             response = self.anthropic_client.messages.create(
                 max_tokens=200,
                 messages=[{"role": "user", "content": selection_prompt}],
-                model="claude-sonnet-4-0",
+                model="claude-sonnet-5",
             )
 
             response_text = response.content[0].text.strip()
@@ -141,7 +141,7 @@ Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"
                                     "text": f"[Resource: {resource_name}]\n{content.text}",
                                 }
                             )
-                        elif content.mimeType in [
+                        elif content.mime_type in [
                             "image/jpeg",
                             "image/png",
                             "image/gif",
@@ -152,14 +152,16 @@ Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"
                                     "type": "image",
                                     "source": {
                                         "type": "base64",
-                                        "media_type": content.mimeType,
+                                        "media_type": content.mime_type,
                                         "data": content.blob,
                                     },
                                 }
                             )
                         else:
                             print(
-                                f"WARNING: Unable to process mimeType {resource_contents.mimeType} for resource {resource_name}"
+                                "WARNING: Unable to process mime_type "
+                                f"{content.mime_type} for "
+                                f"resource {resource_name}"
                             )
                 except Exception as e:
                     print(f"Error loading resource {resource_name}: {e}")
@@ -258,7 +260,7 @@ Example: [{{"name": "calculation-helper", "arguments": {{"operation": "addition"
                     create_message_args = {
                         "max_tokens": 4096,
                         "messages": conversation_messages,
-                        "model": "claude-sonnet-4-0",
+                        "model": "claude-sonnet-5",
                         "tools": available_tools,
                         "tool_choice": {"type": "auto"},
                     }

@@ -8,7 +8,6 @@ from typing import Any
 from anthropic import Anthropic
 from client import MCPClient
 from dotenv import load_dotenv
-from internal_tool import InternalTool
 from mcp_types import (
     Prompt,
     PromptMessage,
@@ -35,12 +34,44 @@ async def progress_handler(
         print(f"{progress} complete")
 
 
+SEARCH_TOOLS_DEFINITION = {
+    "name": "search_tools",
+    "description": "Find available tools matching a query. Matching "
+    "tools become available to call on your next turn.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+    },
+}
+
+SYSTEM_PROMPT = (
+    "You have a search_tools tool that finds more tools. If no "
+    "available tool fits a request, search for one before deciding "
+    "that you cannot complete it. The search is a simple substring "
+    "match, so search with one short keyword (like 'count' or 'add'), "
+    "never a phrase, and try another keyword if the first finds "
+    "nothing."
+)
+
+
 class Agent:
     def __init__(self, mcp_client: MCPClient, anthropic_client: Anthropic):
         self.mcp_client = mcp_client
         self.anthropic_client = anthropic_client
         self.available_resources: dict[str, Resource] = {}
         self.available_prompts: dict[str, Prompt] = {}
+
+    def _search_tools(
+        self, available_tools: list[dict], query: str
+    ) -> list[dict]:
+        """Return definitions of available tools that match the query."""
+        return [
+            tool
+            for tool in available_tools
+            if query.lower()
+            in f"{tool['name']} {tool['description']}".lower()
+        ]
 
     def display_prompts(self) -> None:
         """Show the user the prompts they can invoke, with their arguments."""
@@ -208,16 +239,19 @@ Example: ["math-constants"] or []
                 "'refresh' to reload and redisplay available resources."
             )
             await self.mcp_client.connect()
-            available_tools: list[InternalTool] = (
-                await self.mcp_client.get_available_tools()
-            )
-            available_tools: list[dict[str, str]] = [
-                tool.translate_to_anthropic() for tool in available_tools
-            ]
             await self._refresh()
 
             while True:
                 user_input = input("You: ")
+
+                # Rebuild the tool list every turn; the Client's response
+                # cache makes this free until the server's list changes.
+                available_tools = await self.mcp_client.get_available_tools()
+
+                # Each user turn starts from the baseline toolset: just
+                # the search tool. Tools found during the turn survive
+                # the tool loop, then are dropped with the turn.
+                active_tools = [SEARCH_TOOLS_DEFINITION]
 
                 if user_input.lower() == "goodbye":
                     print("AI Assistant: Goodbye!")
@@ -253,7 +287,8 @@ Example: ["math-constants"] or []
                         max_tokens=4096,
                         messages=conversation_messages,
                         model="claude-sonnet-5",
-                        tools=available_tools,
+                        system=SYSTEM_PROMPT,
+                        tools=active_tools,
                         tool_choice={"type": "auto"},
                     )
                     conversation_messages.append(
@@ -271,6 +306,25 @@ Example: ["math-constants"] or []
                         ]
                         tool_results = []
                         for tool_use in tool_use_blocks:
+                            if tool_use.name == "search_tools":
+                                found = self._search_tools(
+                                    available_tools, tool_use.input["query"]
+                                )
+                                active_tools.extend(
+                                    tool
+                                    for tool in found
+                                    if tool not in active_tools
+                                )
+                                tool_results.append(
+                                    {
+                                        "type": "tool_result",
+                                        "tool_use_id": tool_use.id,
+                                        "content": ", ".join(
+                                            tool["name"] for tool in found
+                                        ),
+                                    }
+                                )
+                                continue
                             print(f"Using tool: {tool_use.name}")
                             tool_result = await self.mcp_client.use_tool(
                                 tool_name=tool_use.name,

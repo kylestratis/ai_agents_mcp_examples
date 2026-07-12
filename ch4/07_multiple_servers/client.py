@@ -1,17 +1,22 @@
 import json
 import logging
-from contextlib import AsyncExitStack
+import webbrowser
 from typing import Any
 
 from anthropic import Anthropic
-from mcp import ClientSession
-from mcp.client.stdio import StdioServerParameters, stdio_client
-from mcp.shared.context import RequestContext
-from mcp.types import (
+from internal_tool import InternalTool
+from mcp.client.session import ClientRequestContext
+from mcp.client.session_group import (
+    ClientSessionGroup,
+    ClientSessionParameters,
+    ServerParameters,
+)
+from mcp_types import (
     BlobResourceContents,
     CreateMessageRequestParams,
     CreateMessageResult,
-    ElicitRequestParams,
+    ElicitRequestFormParams,
+    ElicitRequestURLParams,
     ElicitResult,
     ErrorData,
     ListRootsResult,
@@ -19,7 +24,6 @@ from mcp.types import (
     Prompt,
     PromptMessage,
     Resource,
-    ResourceTemplate,
     Root,
     TextContent,
     TextResourceContents,
@@ -32,21 +36,13 @@ class MCPClient:
     def __init__(
         self,
         name: str,
-        command: str,
-        server_args: list[str],
         llm_client: Anthropic,
-        env_vars: dict[str, str] = None,
         file_roots: list[str] = None,
     ) -> None:
         self.name = name
-        self.command = command
-        self.server_args = server_args
-        self.env_vars = env_vars
         self.file_roots = file_roots
-        self._session: ClientSession = None
-        self._exit_stack: AsyncExitStack = AsyncExitStack()
-        self._connected: bool = False
         self._llm_client = llm_client
+        self._session_group = ClientSessionGroup()
 
     async def _handle_logs(self, params: LoggingMessageNotificationParams) -> None:
         """
@@ -58,12 +54,12 @@ class MCPClient:
 
     async def _handle_sampling(
         self,
-        context: RequestContext[ClientSession, None],
+        context: ClientRequestContext,
         params: CreateMessageRequestParams,
     ) -> CreateMessageResult | ErrorData:
         """
-        Sampling handler that passes the server's prompt to the LLM client, implementing
-        the SamplingFnT protocol, which is why the unused context parameter is included.
+        Sampling handler that passes the server's prompt to the LLM client,
+        implementing the SamplingFnT protocol.
         """
         messages = []
         for message in params.messages:
@@ -78,47 +74,45 @@ class MCPClient:
                 )
 
         response = self._llm_client.messages.create(
-            max_tokens=params.maxTokens,
+            max_tokens=params.max_tokens,
             messages=messages,
-            model="claude-sonnet-4-0",
+            model="claude-sonnet-5",
         )
 
-        # Extract content from the response - content is a list of content blocks
-        if response.content and len(response.content) > 0:
-            content = response.content[0]
-            if hasattr(content, "text"):
-                content_data = TextContent(type="text", text=content.text)
-            elif hasattr(content, "data"):
-                content_data = BlobResourceContents(
-                    type="blob",
-                    data=content.data,
-                    mimeType=content.mimeType,
-                )
-            else:
-                # Fallback to string representation
-                content_data = TextContent(type="text", text=str(content))
+        # Content is a list of blocks; use the first text block
+        if response.content and hasattr(response.content[0], "text"):
+            content_data = TextContent(
+                type="text", text=response.content[0].text
+            )
         else:
-            # No content in response
-            content_data = ""
+            # Fallback to string representation
+            content_data = TextContent(
+                type="text", text=str(response.content)
+            )
 
         return CreateMessageResult(
-            role=response.role, content=content_data, model="claude-sonnet-4-0"
+            role=response.role,
+            content=content_data,
+            model="claude-sonnet-5",
         )
 
     async def _handle_roots(
         self,
-        context: RequestContext[ClientSession, Any],
+        context: ClientRequestContext,
     ) -> ListRootsResult | ErrorData:
         """
-        Roots handler that returns the file roots, implementing the RootsFnT protocol.
+        Roots handler that returns the file roots, implementing the
+        ListRootsFnT protocol.
         """
         roots_result = []
-        for root in self.file_roots:
+        for root in self.file_roots or []:
             if not root.startswith("file:///"):
-                logger.warning(f"Root {root} does not start with file:///, ignoring")
+                logger.warning(
+                    f"Root {root} does not start with file:///, ignoring"
+                )
             else:
                 roots_result.append(Root(uri=root))
-        if roots_result is None:
+        if not roots_result:
             return ErrorData(code=-32602, message="No valid file roots provided")
         return ListRootsResult(roots=roots_result)
 
@@ -216,25 +210,29 @@ class MCPClient:
 
     async def _handle_elicitation(
         self,
-        context: RequestContext[ClientSession, Any],
-        params: ElicitRequestParams,
+        context: ClientRequestContext,
+        params: ElicitRequestFormParams | ElicitRequestURLParams,
     ) -> ElicitResult | ErrorData:
         """
-        Elicitation handler that displays the server request to the user, handles
-        their accept/decline response, and collects form data when accepted,
-        implementing the ElicitFnT protocol.
+        Elicitation handler that displays the server request to the user,
+        handles their accept/decline response, and collects form data or
+        opens a URL when accepted, implementing the ElicitationFnT protocol.
         """
         # Get the server name from the client instance
         requesting_server = self.name
 
         # Display the elicitation request to the user
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"ELICITATION REQUEST FROM SERVER: {requesting_server}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Message: {params.message}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
-        # Get user input for accept/decline
+        # URL mode: consent first, then hand off to the browser
+        if isinstance(params, ElicitRequestURLParams):
+            return self._handle_url_elicitation(params)
+
+        # Form mode: get user input for accept/decline
         while True:
             user_response = (
                 input("\nDo you want to accept this request? (y/n/c for cancel): ")
@@ -245,7 +243,7 @@ class MCPClient:
             if user_response in ["y", "yes", "accept"]:
                 print("Request accepted")
                 # Collect form data based on the schema
-                form_data = self._collect_form_data(params.requestedSchema)
+                form_data = self._collect_form_data(params.requested_schema)
                 if form_data is not None:
                     print("Form data collected successfully")
                     return ElicitResult(action="accept", content=form_data)
@@ -260,33 +258,33 @@ class MCPClient:
                 return ElicitResult(action="cancel")
             else:
                 print(
-                    "Invalid response. Please enter 'y' (accept), 'n' (decline), or 'c' (cancel)."
+                    "Invalid response. Please enter 'y' (accept), "
+                    "'n' (decline), or 'c' (cancel)."
                 )
 
-    async def connect(self) -> None:
+    def _handle_url_elicitation(
+        self, params: ElicitRequestURLParams
+    ) -> ElicitResult:
         """
-        Connect to the server set in the constructor.
+        Show the user the full URL, get explicit consent, and only
+        then open it. The interaction itself happens out of band.
         """
-        if self._connected:
-            raise RuntimeError("Client is already connected")
+        print("The server is asking you to continue in your browser at:")
+        print(f"  {params.url}")
+        user_response = input("\nOpen this URL? (y/n): ").lower().strip()
+        if user_response in ["y", "yes"]:
+            webbrowser.open(str(params.url))
+            return ElicitResult(action="accept")
+        print("Request declined")
+        return ElicitResult(action="decline")
 
-        server_parameters = StdioServerParameters(
-            command=self.command,
-            args=self.server_args,
-            env=self.env_vars if self.env_vars else None,
-        )
-
-        # Connect to stdio server, starting subprocess
-        stdio_connection = await self._exit_stack.enter_async_context(
-            stdio_client(server_parameters)
-        )
-        self.read, self.write = stdio_connection
-
-        # Start MCP client session
-        self._session = await self._exit_stack.enter_async_context(
-            ClientSession(
-                read_stream=self.read,
-                write_stream=self.write,
+    async def connect(self, server_parameters: ServerParameters) -> None:
+        """
+        Connect to a server described by server_parameters.
+        """
+        await self._session_group.connect_to_server(
+            server_params=server_parameters,
+            session_params=ClientSessionParameters(
                 logging_callback=self._handle_logs,
                 sampling_callback=self._handle_sampling,
                 list_roots_callback=self._handle_roots,
@@ -294,17 +292,13 @@ class MCPClient:
             ),
         )
 
-        # Initialize session
-        await self._session.initialize()
-        self._connected = True
-
     async def use_tool(
         self, tool_name: str, arguments: dict[str, Any] | None = None
     ) -> list[str]:
-        if not self._connected:
+        if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
 
-        tool_call_result = await self._session.call_tool(
+        tool_call_result = await self._session_group.call_tool(
             name=tool_name, arguments=arguments
         )
         logger.debug(f"Calling tool {tool_name} with arguments {arguments}")
@@ -329,80 +323,74 @@ class MCPClient:
     async def get_resource(
         self, uri: str
     ) -> list[BlobResourceContents | TextResourceContents]:
-        if not self._connected:
+        if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
-        resource_read_result = await self._session.read_resource(uri=uri)
-
-        if not resource_read_result.contents:
-            logger.warning(f"No content read for resource URI {uri}")
-        return resource_read_result.contents
+        # The session group has no read_resource passthrough, so ask
+        # each connected session until one serves the URI.
+        for session in self._session_group.sessions:
+            try:
+                resource_read_result = await session.read_resource(uri=uri)
+            except Exception:
+                continue
+            if resource_read_result.contents:
+                return resource_read_result.contents
+        logger.warning(f"No content read for resource URI {uri}")
+        return []
 
     async def load_prompt(
         self, name: str, arguments: dict[str, str]
     ) -> list[PromptMessage]:
-        if not self._connected:
+        if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
-        prompt_load_result = await self._session.get_prompt(
-            name=name, arguments=arguments
-        )
-
-        if not prompt_load_result.messages:
-            logger.warning(f"No prompt found for prompt {name}")
-        else:
-            logger.debug(
-                f"Loaded prompt {name} with description {prompt_load_result.description}"
-            )
-        return prompt_load_result.messages
+        for session in self._session_group.sessions:
+            try:
+                prompt_load_result = await session.get_prompt(
+                    name=name, arguments=arguments
+                )
+            except Exception:
+                continue
+            if prompt_load_result.messages:
+                return prompt_load_result.messages
+        logger.warning(f"No prompt found for prompt {name}")
+        return []
 
     async def get_available_resources(self) -> list[Resource]:
-        if not self._connected:
+        if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
 
-        resources_result = await self._session.list_resources()
-        if not resources_result.resources:
+        resources_result = list(self._session_group.resources.values())
+        if not resources_result:
             logger.warning("No resources found on server")
-        return resources_result.resources
+        return resources_result
 
-    async def get_available_resource_templates(self) -> list[ResourceTemplate]:
-        if not self._connected:
+    async def get_available_tools(self) -> list[InternalTool]:
+        if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
 
-        resource_templates_result = await self._session.list_resource_templates()
-        if not resource_templates_result.resources:
-            logger.warning("No resource templates found on server")
-        return resource_templates_result.resources
-
-    async def get_available_tools(self) -> list[dict[str, Any]]:
-        if not self._connected:
-            raise RuntimeError("Client not connected to a server")
-
-        tools_result = await self._session.list_tools()
-        if not tools_result.tools:
+        if not self._session_group.tools:
             logger.warning("No tools found on server")
         available_tools = [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.inputSchema,
-            }
-            for tool in tools_result.tools
+            InternalTool(
+                name=tool.name,
+                description=tool.description,
+                input_schema=tool.input_schema,
+            )
+            for tool in self._session_group.tools.values()
         ]
         return available_tools
 
     async def get_available_prompts(self) -> list[Prompt]:
-        if not self._connected:
+        if not self._session_group.sessions:
             raise RuntimeError("Client not connected to a server")
 
-        prompt_result = await self._session.list_prompts()
-        if not prompt_result.prompts:
+        prompt_result = list(self._session_group.prompts.values())
+        if not prompt_result:
             logger.warning("No prompts found on server")
-        return prompt_result.prompts
+        return prompt_result
 
     async def disconnect(self) -> None:
         """
         Clean up any resources
         """
-        if self._exit_stack:
-            await self._exit_stack.aclose()
-            self._connected = False
-            self._session = None
+        for session in list(self._session_group.sessions):
+            await self._session_group.disconnect_from_server(session)

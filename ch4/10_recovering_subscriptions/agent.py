@@ -1,14 +1,22 @@
+"""
+Recovery watcher example. Start the HTTP calculator server first, in a
+separate terminal, from the ch4 directory:
+
+    uv run calculator_server_http.py
+
+Then run this agent. Ask it to "install the plugin" to watch a
+tools-list change event arrive through the subscription stream.
+"""
+
 import asyncio
 import json
 import logging
 import os
-from pathlib import Path
 from typing import Any
 
 from anthropic import Anthropic
 from client import MCPClient
 from dotenv import load_dotenv
-from internal_tool import InternalTool
 from mcp_types import (
     Prompt,
     PromptMessage,
@@ -208,16 +216,18 @@ Example: ["math-constants"] or []
                 "'refresh' to reload and redisplay available resources."
             )
             await self.mcp_client.connect()
-            available_tools: list[InternalTool] = (
-                await self.mcp_client.get_available_tools()
+            watch_task = asyncio.create_task(
+                self.mcp_client.watch_server_changes()
             )
-            available_tools: list[dict[str, str]] = [
-                tool.translate_to_anthropic() for tool in available_tools
-            ]
             await self._refresh()
 
             while True:
                 user_input = input("You: ")
+
+                # Rebuild the tool list every turn: a change event from
+                # the watcher evicts the cache, so this picks up new
+                # tools as soon as the server announces them.
+                available_tools = await self.mcp_client.get_available_tools()
 
                 if user_input.lower() == "goodbye":
                     print("AI Assistant: Goodbye!")
@@ -301,23 +311,17 @@ Example: ["math-constants"] or []
                             print("Assistant: [No text response available]")
                         break
         finally:
+            watch_task.cancel()
             await self.mcp_client.disconnect()
 
 
 if __name__ == "__main__":
     mcp_client = MCPClient(
         name="calculator_server_connection",
-        command="uv",
-        server_args=[
-            "--directory",
-            str(Path(__file__).parent.parent.resolve()),
-            "run",
-            "calculator_server.py",
-        ],
+        server_url=os.environ.get(
+            "MCP_SERVER_URL", "http://localhost:8000/mcp"
+        ),
         llm_client=anthropic_client,
-        file_roots=[
-            f"file:///{str(Path(__file__).parent.resolve())}",
-        ],
     )
     agent = Agent(mcp_client, anthropic_client)
     asyncio.run(agent.run())

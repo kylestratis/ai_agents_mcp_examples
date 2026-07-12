@@ -2,13 +2,19 @@ import asyncio
 import json
 import logging
 import os
-from pathlib import Path
+import webbrowser
 from typing import Any
 
 from anthropic import Anthropic
 from client import MCPClient
 from dotenv import load_dotenv
-from internal_tool import InternalTool
+from mcp.client.auth import OAuthClientProvider
+from mcp.shared.auth import (
+    AuthorizationCodeResult,
+    OAuthClientInformationFull,
+    OAuthClientMetadata,
+    OAuthToken,
+)
 from mcp_types import (
     Prompt,
     PromptMessage,
@@ -22,6 +28,48 @@ load_dotenv()
 LLM_API_KEY = os.environ["LLM_API_KEY"]
 anthropic_client = Anthropic(api_key=LLM_API_KEY)
 logger = logging.getLogger(__name__)
+
+
+class InMemoryTokenStorage:
+    """
+    Simplest possible TokenStorage: holds the tokens and the client's
+    registration for the life of this process only. A real host should
+    persist both somewhere fit for secrets, one store per server.
+    """
+
+    def __init__(self) -> None:
+        self._tokens: OAuthToken | None = None
+        self._client_info: OAuthClientInformationFull | None = None
+
+    async def get_tokens(self) -> OAuthToken | None:
+        return self._tokens
+
+    async def set_tokens(self, tokens: OAuthToken) -> None:
+        self._tokens = tokens
+
+    async def get_client_info(self) -> OAuthClientInformationFull | None:
+        return self._client_info
+
+    async def set_client_info(
+        self, client_info: OAuthClientInformationFull
+    ) -> None:
+        self._client_info = client_info
+
+
+async def open_browser(authorization_url: str) -> None:
+    """Redirect handler: send the user to the authorization server."""
+    print(f"Opening your browser to authorize: {authorization_url}")
+    webbrowser.open(authorization_url)
+
+
+async def wait_for_callback() -> AuthorizationCodeResult:
+    """
+    Callback handler: receive the authorization code. A desktop app
+    would run a local redirect listener; this CLI asks for a paste.
+    """
+    code = input("Paste the authorization code: ").strip()
+    state = input("Paste the state parameter: ").strip()
+    return AuthorizationCodeResult(code=code, state=state)
 
 
 async def progress_handler(
@@ -207,13 +255,7 @@ Example: ["math-constants"] or []
                 "Welcome to your AI Assistant. Type 'goodbye' to quit or "
                 "'refresh' to reload and redisplay available resources."
             )
-            await self.mcp_client.connect()
-            available_tools: list[InternalTool] = (
-                await self.mcp_client.get_available_tools()
-            )
-            available_tools: list[dict[str, str]] = [
-                tool.translate_to_anthropic() for tool in available_tools
-            ]
+            available_tools = await self.mcp_client.get_available_tools()
             await self._refresh()
 
             while True:
@@ -304,20 +346,50 @@ Example: ["math-constants"] or []
             await self.mcp_client.disconnect()
 
 
-if __name__ == "__main__":
+async def main() -> None:
+    server_url = os.environ.get("MCP_OAUTH_SERVER_URL")
+    bearer_token = os.environ.get("MCP_SERVER_TOKEN")
+    if not server_url:
+        print(
+            "Set MCP_OAUTH_SERVER_URL to an OAuth-protected MCP server to "
+            "run this example. Optionally set MCP_SERVER_TOKEN to use a "
+            "static bearer token instead of the full OAuth flow."
+        )
+        return
+
     mcp_client = MCPClient(
-        name="calculator_server_connection",
-        command="uv",
-        server_args=[
-            "--directory",
-            str(Path(__file__).parent.parent.resolve()),
-            "run",
-            "calculator_server.py",
-        ],
+        name="oauth_server_connection",
+        server_url=server_url,
         llm_client=anthropic_client,
-        file_roots=[
-            f"file:///{str(Path(__file__).parent.resolve())}",
-        ],
     )
+
+    if bearer_token:
+        # Simplest case: a static API key or bearer token via headers
+        await mcp_client.connect(
+            headers={"Authorization": f"Bearer {bearer_token}"}
+        )
+    else:
+        client_metadata = OAuthClientMetadata(
+            client_name="Calculator Assistant",
+            redirect_uris=["http://localhost:3030/callback"],
+            scope="calculator:read calculator:write",
+        )
+
+        # Full OAuth: the SDK's provider handles the authorization-code
+        # flow with PKCE, token refresh, and client registration for you.
+        # Pass client_metadata_url to prefer CIMD registration.
+        oauth = OAuthClientProvider(
+            server_url=server_url,
+            client_metadata=client_metadata,
+            storage=InMemoryTokenStorage(),
+            redirect_handler=open_browser,
+            callback_handler=wait_for_callback,
+        )
+        await mcp_client.connect(auth=oauth)
+
     agent = Agent(mcp_client, anthropic_client)
-    asyncio.run(agent.run())
+    await agent.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

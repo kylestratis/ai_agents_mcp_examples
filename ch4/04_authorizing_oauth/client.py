@@ -4,11 +4,11 @@ import webbrowser
 from contextlib import AsyncExitStack
 from typing import Any, Callable
 
+import httpx
 from anthropic import Anthropic
-from internal_tool import InternalTool
 from mcp.client import Client
 from mcp.client.session import ClientRequestContext
-from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp_types import (
     BlobResourceContents,
     CreateMessageRequestParams,
@@ -35,16 +35,12 @@ class MCPClient:
     def __init__(
         self,
         name: str,
-        command: str,
-        server_args: list[str],
+        server_url: str,
         llm_client: Anthropic,
-        env_vars: dict[str, str] | None = None,
         file_roots: list[str] | None = None,
     ) -> None:
         self.name = name
-        self.command = command
-        self.server_args = server_args
-        self.env_vars = env_vars
+        self.server_url = server_url
         self.file_roots = file_roots
         self._client: Client | None = None
         self._exit_stack: AsyncExitStack = AsyncExitStack()
@@ -286,33 +282,53 @@ class MCPClient:
 
         return collected_data
 
-    async def connect(self) -> None:
+    async def connect(
+        self,
+        headers: dict[str, str] | None = None,
+        auth: httpx.Auth | None = None,
+    ) -> None:
         """
         Connect to the server set in the constructor.
         """
         if self._connected:
             raise RuntimeError("Client is already connected")
 
-        server_parameters = StdioServerParameters(
-            command=self.command,
-            args=self.server_args,
-            env=self.env_vars if self.env_vars else None,
-        )
+        try:
+            if headers or auth:
+                http_client = await self._exit_stack.enter_async_context(
+                    httpx.AsyncClient(
+                        headers=headers,
+                        auth=auth,
+                        timeout=httpx.Timeout(30.0, read=300.0),
+                        follow_redirects=True,
+                    )
+                )
+                transport = streamable_http_client(
+                    url=self.server_url, http_client=http_client
+                )
+                self._client = Client(
+                    transport,
+                    logging_callback=self._handle_logs,
+                    sampling_callback=self._handle_sampling,
+                    list_roots_callback=self._handle_roots,
+                    elicitation_callback=self._handle_elicitation,
+                )
+            else:
+                self._client = Client(
+                    self.server_url,
+                    logging_callback=self._handle_logs,
+                    sampling_callback=self._handle_sampling,
+                    list_roots_callback=self._handle_roots,
+                    elicitation_callback=self._handle_elicitation,
+                )
 
-        transport = stdio_client(server_parameters)
-
-        # Start the MCP client
-        self._client = Client(
-            transport,
-            logging_callback=self._handle_logs,
-            sampling_callback=self._handle_sampling,
-            list_roots_callback=self._handle_roots,
-            elicitation_callback=self._handle_elicitation,
-        )
-        await self._exit_stack.enter_async_context(self._client)
+            await self._exit_stack.enter_async_context(self._client)
+        except Exception:
+            await self._exit_stack.aclose()
+            raise
         self._connected = True
 
-    async def get_available_tools(self) -> list[InternalTool]:
+    async def get_available_tools(self) -> list[dict[str, Any]]:
         if not self._connected:
             raise RuntimeError("Client not connected to a server")
 
@@ -320,11 +336,11 @@ class MCPClient:
         if not tools_result.tools:
             logger.warning("No tools found on server")
         available_tools = [
-            InternalTool(
-                name=tool.name,
-                description=tool.description,
-                input_schema=tool.input_schema,
-            )
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema,
+            }
             for tool in tools_result.tools
         ]
         return available_tools

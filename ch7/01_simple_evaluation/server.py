@@ -2,13 +2,10 @@
 Provides mathematical operations as tools for calculation tasks.
 """
 
-import math
+from mcp.server.mcpserver import MCPServer
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
-
-# Initialize FastMCP server
-mcp = FastMCP("calculator", stateless_http=True, json_response=True)
+# Initialize MCP server
+mcp = MCPServer("calculator")
 
 
 @mcp.tool()
@@ -48,7 +45,10 @@ async def multiply(a: float, b: float) -> str:
 
 
 @mcp.tool()
-async def divide(a: float, b: float,) -> str:
+async def divide(
+    a: float,
+    b: float,
+) -> str:
     """Divide the first number by the second.
 
     Args:

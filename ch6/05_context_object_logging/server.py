@@ -1,15 +1,12 @@
 from datetime import datetime
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
+from mcp.server.mcpserver import Context, MCPServer
 
-mcp = FastMCP("context-object-logging-server")
+mcp = MCPServer("context-object-logging-server")
 
 
 @mcp.tool()
-async def add(
-    a: float, b: float, ctx: Context[ServerSession, None]
-) -> dict[str, float]:
+async def add(a: float, b: float, ctx: Context) -> dict[str, float]:
     """Add two numbers together.
 
     Args:

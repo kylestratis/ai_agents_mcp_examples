@@ -1,28 +1,26 @@
 import os
+from typing import Annotated
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
-from mcp.types import RootsListChangedNotification
+from mcp.server.mcpserver import Context, ListRoots, MCPServer, Resolve
+from mcp_types import ListRootsResult
 from pydantic import FileUrl
 
-mcp = FastMCP("roots-server")
-
-roots_cache = []
+mcp = MCPServer("roots-server")
 
 
-async def handle_roots_list_changed(
-    notifications: RootsListChangedNotification,
-) -> None:
-    roots_cache.clear()
+def request_roots() -> ListRoots:
+    """Resolver: fetch the client's current roots list."""
+    return ListRoots()
 
 
 @mcp.tool()
-async def count_files(file_path: str, ctx: Context[ServerSession, None]) -> str:
+async def count_files(
+    file_path: str,
+    roots: Annotated[ListRootsResult, Resolve(request_roots)],
+    ctx: Context,
+) -> str:
     """Count files in a given directory."""
-    if not roots_cache:
-        roots_result = await ctx.session.list_roots()
-        roots_cache.extend(roots_result.roots)
-    root_uris: list[FileUrl] = [root.uri for root in roots_cache]
+    root_uris: list[FileUrl] = [root.uri for root in roots.roots]
 
     file_path_abs = os.path.abspath(file_path)
     is_allowed = False
@@ -35,7 +33,7 @@ async def count_files(file_path: str, ctx: Context[ServerSession, None]) -> str:
 
     if not is_allowed:
         error_msg = (
-            f"Access denied: {file_path} is not within allowed roots {root_uris}"
+            f"Access denied: {file_path} is not within allowed roots " f"{root_uris}"
         )
         await ctx.error(error_msg)
         raise ValueError(error_msg)
@@ -52,7 +50,4 @@ async def count_files(file_path: str, ctx: Context[ServerSession, None]) -> str:
 
 
 if __name__ == "__main__":
-    mcp._mcp_server.notification_handlers[RootsListChangedNotification] = (
-        handle_roots_list_changed
-    )
     mcp.run()

@@ -1,7 +1,6 @@
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.shared.context import RequestContext
+from mcp.server.mcpserver import Context, MCPServer
 
-mcp = FastMCP("manual-notification-server")
+mcp = MCPServer("manual-notification-server")
 
 
 @mcp.prompt()
@@ -20,19 +19,17 @@ async def calculate_operation(operation: str) -> str:
 
 
 @mcp.tool()
-async def remove_prompt(
-    prompt_name: str, ctx: Context[RequestContext, None]
-) -> None:
-    """A tool that performs a long-running operation and reports its progress.
+async def remove_prompt(prompt_name: str, ctx: Context) -> None:
+    """Remove a prompt from the server's prompt list by name.
     Args:
-        length: The length of the operation in steps.
+        prompt_name: The name of the prompt to remove.
     """
     try:
-        mcp._prompt_manager._prompts.pop(prompt_name)
-    except KeyError:
+        mcp.remove_prompt(prompt_name)
+    except ValueError:
         await ctx.error(f"Prompt {prompt_name} not found")
         return
-    await ctx.request_context.session.send_prompt_list_changed()
+    await ctx.notify_prompts_changed()
 
 
 if __name__ == "__main__":

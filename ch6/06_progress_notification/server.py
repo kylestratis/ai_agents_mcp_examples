@@ -1,15 +1,12 @@
 from time import sleep
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
+from mcp.server.mcpserver import Context, MCPServer
 
-mcp = FastMCP("progress-notification-fastmcp-server")
+mcp = MCPServer("progress-notification-server")
 
 
 @mcp.tool()
-async def slow_operation(
-    ctx: Context[ServerSession, None], length: int = 100
-) -> None:
+async def slow_operation(ctx: Context, length: int = 100) -> None:
     """A tool that performs a long-running operation and reports its progress.
     Args:
         length: The length of the operation in steps.

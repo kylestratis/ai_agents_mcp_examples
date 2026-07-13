@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import Resource
+from mcp.server.mcpserver import Context, MCPServer
 
-mcp = FastMCP(
+mcp = MCPServer(
     "context-object-session-info-server",
 )
 
@@ -11,8 +10,8 @@ KNOWLEDGE_BASE_FILENAME = "knowledge.txt"
 
 
 @mcp.resource(uri=f"file://{KNOWLEDGE_BASE_FILENAME}")
-async def knowledge_base() -> Resource:
-    """A resource that loads a test-based knowledge base."""
+async def knowledge_base() -> str:
+    """A resource that loads a text-based knowledge base."""
 
     # Get the absolute path to knowledge.txt relative to this script
     knowledge_path = Path(__file__).parent / KNOWLEDGE_BASE_FILENAME
@@ -29,12 +28,15 @@ async def get_client_info(ctx: Context) -> dict:
 
 @mcp.tool()
 async def add_fact_to_knowledge_base(fact: str, ctx: Context) -> None:
-    """Adds a new fact to the knowledge base file and sends resource_changed notification."""
+    """
+    Adds a new fact to the knowledge base file and sends resource_updated
+    notification.
+    """
 
     knowledge_path = Path(__file__).parent / KNOWLEDGE_BASE_FILENAME
     with open(knowledge_path, "a") as f:
         f.write(fact + "\n")
-    await ctx.session.send_resource_updated(uri=f"file://{KNOWLEDGE_BASE_FILENAME}")
+    await ctx.notify_resource_updated(uri=f"file://{KNOWLEDGE_BASE_FILENAME}")
 
 
 if __name__ == "__main__":

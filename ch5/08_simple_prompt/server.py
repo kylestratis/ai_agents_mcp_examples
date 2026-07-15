@@ -1,8 +1,8 @@
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.prompts.base import UserMessage
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.prompts.base import UserMessage
 
-# Initialize FastMCP server
-mcp = FastMCP("simple-prompt-server")
+# Initialize MCP server
+mcp = MCPServer("simple-prompt-server")
 
 
 @mcp.prompt()

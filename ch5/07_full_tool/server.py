@@ -1,14 +1,14 @@
 from random import randint
 
-from mcp.server.fastmcp import FastMCP
-from mcp.types import ToolAnnotations
+from mcp.server.mcpserver import MCPServer
+from mcp_types import ToolAnnotations
 from pydantic import BaseModel
 
-# Initialize FastMCP server
-mcp = FastMCP("full-tool-server")
+# Initialize MCP server
+mcp = MCPServer("full-tool-server")
 
 
-class Class(BaseModel):
+class Course(BaseModel):
     title: str
     grade: int
     instructor: str
@@ -17,26 +17,26 @@ class Class(BaseModel):
 
 class ReportCard(BaseModel):
     name: str
-    grades: list[Class]
+    grades: list[Course]
     weighted_gpa: float | None = None
     unweighted_gpa: float | None = None
 
 
-def _generate_classes() -> list[Class]:
+def _generate_courses() -> list[Course]:
     return [
-        Class(
+        Course(
             title="Math",
             grade=randint(0, 100),
             instructor="Mr. Smith",
             credits=randint(1, 4),
         ),
-        Class(
+        Course(
             title="Science",
             grade=randint(0, 100),
             instructor="Mrs. Johnson",
             credits=randint(1, 4),
         ),
-        Class(
+        Course(
             title="History",
             grade=randint(0, 100),
             instructor="Mr. Brown",
@@ -47,24 +47,24 @@ def _generate_classes() -> list[Class]:
 
 @mcp.tool(title="Generate Report Card")
 def grader_generate_report_card(
-    name: str, classes: list[Class] | None = None
+    name: str, courses: list[Course] | None = None
 ) -> ReportCard:
     """
-    Generates a full report card for a student and a list of classes.
-    Can leave out the list of classes to use a randomly generated list.
+    Generates a full report card for a student and a list of courses.
+    Can leave out the list of courses to use a randomly generated list.
 
     Args:
         name: The name of the student
-        classes: An optional list of Class objects to add to the report card
+        courses: An optional list of Course objects to add to the report card
     """
-    if not classes:
-        classes = _generate_classes()
+    if not courses:
+        courses = _generate_courses()
 
-    weighted_gpa = grader_calculate_gpa(classes)
-    unweighted_gpa = grader_calculate_gpa(classes, weighted=False)
+    weighted_gpa = grader_calculate_gpa(courses)
+    unweighted_gpa = grader_calculate_gpa(courses, weighted=False)
     return ReportCard(
         name=name,
-        grades=classes,
+        grades=courses,
         weighted_gpa=weighted_gpa,
         unweighted_gpa=unweighted_gpa,
     )
@@ -72,23 +72,23 @@ def grader_generate_report_card(
 
 @mcp.tool(
     title="Calculate GPA",
-    annotations=ToolAnnotations(readOnlyHint=True),
+    annotations=ToolAnnotations(read_only_hint=True),
     structured_output=False,
 )
-def grader_calculate_gpa(classes: list[Class], weighted: bool = True) -> float:
+def grader_calculate_gpa(courses: list[Course], weighted: bool = True) -> float:
     """
-    Calculate the GPA for a list of classes. Calculates the weighted
+    Calculate the GPA for a list of courses. Calculates the weighted
     GPA by default, but can optionally calculate the unweighted GPA.
 
     Args:
-        classes: A list of classes
+        courses: A list of courses
         weighted: Whether to use weighted GPA
     """
     if weighted:
-        return sum(_class.grade * _class.credits for _class in classes) / sum(
-            _class.credits for _class in classes
+        return sum(course.grade * course.credits for course in courses) / sum(
+            course.credits for course in courses
         )
-    return sum(_class.grade for _class in classes) / len(classes)
+    return sum(course.grade for course in courses) / len(courses)
 
 
 if __name__ == "__main__":

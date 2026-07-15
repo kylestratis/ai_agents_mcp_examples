@@ -1,71 +1,91 @@
 import asyncio
+import json
 import sys
-from typing import Any
 
 import mcp.server.stdio
-from mcp.server.lowlevel import NotificationOptions, Server
+from mcp.server import NotificationOptions, Server, ServerRequestContext
 from mcp.server.models import InitializationOptions
-from mcp.types import Tool
+from mcp_types import (
+    CallToolRequestParams,
+    CallToolResult,
+    ListToolsResult,
+    PaginatedRequestParams,
+    TextContent,
+    Tool,
+)
 
-# Create a server instance
-server = Server("low-level-server")
 
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
+async def list_tools(
+    ctx: ServerRequestContext, params: PaginatedRequestParams | None
+) -> ListToolsResult:
     """List all tools available on the server."""
-    return [
-        Tool(
-            name="add",
-            description="Add two numbers together.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "a": {
-                        "type": "number",
-                        "description": "The first number to add",
+    return ListToolsResult(
+        tools=[
+            Tool(
+                name="add",
+                description="Add two numbers together.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "a": {
+                            "type": "number",
+                            "description": "The first number to add",
+                        },
+                        "b": {
+                            "type": "number",
+                            "description": "The second number to add",
+                        },
                     },
-                    "b": {
-                        "type": "number",
-                        "description": "The second number to add",
-                    },
+                    "required": ["a", "b"],
                 },
-                "required": ["a", "b"],
-            },
-            outputSchema={
-                "type": "object",
-                "properties": {
-                    "augend": {
-                        "type": "number",
-                        "description": "The first number to add",
+                output_schema={
+                    "type": "object",
+                    "properties": {
+                        "augend": {
+                            "type": "number",
+                            "description": "The first number to add",
+                        },
+                        "addend": {
+                            "type": "number",
+                            "description": "The second number to add",
+                        },
+                        "sum": {
+                            "type": "number",
+                            "description": "The result of the addition",
+                        },
                     },
-                    "addend": {
-                        "type": "number",
-                        "description": "The second number to add",
-                    },
-                    "sum": {
-                        "type": "number",
-                        "description": "The result of the addition",
-                    },
+                    "required": ["augend", "addend", "sum"],
                 },
-                "required": ["augend", "addend", "sum"],
-            },
-        )
-    ]
+            )
+        ]
+    )
 
 
-@server.call_tool()
-async def add(name: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Add two numbers together.
+async def add(
+    ctx: ServerRequestContext, params: CallToolRequestParams
+) -> CallToolResult:
+    """Add two numbers together."""
+    if params.name != "add":
+        raise ValueError(f"Unknown tool: {params.name}")
+    args = params.arguments or {}
+    result = {
+        "augend": args["a"],
+        "addend": args["b"],
+        "sum": args["a"] + args["b"],
+    }
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(result))],
+        structured_content=result,
+    )
 
-    Args:
-        a: First number
-        b: Second number
-    """
-    if name != "add":
-        raise ValueError(f"Unknown tool: {name}")
-    result = {"augend": args["a"], "addend": args["b"], "sum": args["a"] + args["b"]}
-    return result
+
+# Create a server instance, registering the handlers
+server = Server(
+    "low-level-server",
+    version="0.1.0",
+    on_list_tools=list_tools,
+    on_call_tool=add,
+)
 
 
 async def run():

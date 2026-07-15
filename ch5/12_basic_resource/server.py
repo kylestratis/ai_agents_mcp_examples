@@ -1,15 +1,14 @@
 from pathlib import Path
 
-from mcp import Resource
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
-# Initialize FastMCP server
-mcp = FastMCP("basic-resource-server")
+# Initialize MCP server
+mcp = MCPServer("basic-resource-server")
 
 
 @mcp.resource("file://knowledge.txt")
-async def knowledge_base() -> Resource:
-    """A resource that loads a test-based knowledge base."""
+async def knowledge_base() -> str:
+    """A resource that loads a text-based knowledge base."""
 
     # Get the absolute path to knowledge.txt relative to this script
     knowledge_path = Path(__file__).parent / "knowledge.txt"

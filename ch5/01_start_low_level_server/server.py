@@ -1,15 +1,16 @@
 import asyncio
+import sys
 
 import mcp.server.stdio
-from mcp.server.lowlevel import NotificationOptions, Server
+from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
 # Create a server instance
-server = Server("low-level-server")
+server = Server("low-level-server", version="0.1.0")
 
 
 async def run():
-    print("Running low-level server")
+    print("Running low-level server", file=sys.stderr)
     initialization_options = InitializationOptions(
         server_name="low-level-server",
         server_version="0.1.0",

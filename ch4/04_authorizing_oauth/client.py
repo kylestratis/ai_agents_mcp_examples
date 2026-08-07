@@ -4,7 +4,7 @@ import webbrowser
 from contextlib import AsyncExitStack
 from typing import Any, Callable
 
-import httpx
+import httpx2
 from anthropic import Anthropic
 from mcp.client import Client
 from mcp.client.session import ClientRequestContext
@@ -285,7 +285,7 @@ class MCPClient:
     async def connect(
         self,
         headers: dict[str, str] | None = None,
-        auth: httpx.Auth | None = None,
+        auth: httpx2.Auth | None = None,
     ) -> None:
         """
         Connect to the server set in the constructor.
@@ -296,10 +296,10 @@ class MCPClient:
         try:
             if headers or auth:
                 http_client = await self._exit_stack.enter_async_context(
-                    httpx.AsyncClient(
+                    httpx2.AsyncClient(
                         headers=headers,
                         auth=auth,
-                        timeout=httpx.Timeout(30.0, read=300.0),
+                        timeout=httpx2.Timeout(30.0, read=300.0),
                         follow_redirects=True,
                     )
                 )

@@ -12,12 +12,10 @@ async def resource_template(filename: str) -> FileResource:
     """A resource that loads one of two files based on the filename parameter."""
     # Get the absolute path to the file relative to this script
     file_to_load = Path(__file__).parent / filename
-    if file_to_load.suffix.lower() == ".txt":
-        binary_flag = False
-    else:
-        binary_flag = True
+    # Decode .txt files as text; serve anything else as a binary blob.
+    encoding = "utf-8" if file_to_load.suffix.lower() == ".txt" else None
     return FileResource(
-        uri=f"file:///{filename}", path=file_to_load, is_binary=binary_flag
+        uri=f"file:///{filename}", path=file_to_load, encoding=encoding
     )
 
 

@@ -1,7 +1,7 @@
 from contextlib import AsyncExitStack
 from typing import Any
 
-import httpx
+import httpx2
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 
@@ -28,9 +28,9 @@ class MCPClient:
         try:
             if headers:
                 http_client = await self._exit_stack.enter_async_context(
-                    httpx.AsyncClient(
+                    httpx2.AsyncClient(
                         headers=headers,
-                        timeout=httpx.Timeout(30.0, read=300.0),
+                        timeout=httpx2.Timeout(30.0, read=300.0),
                         follow_redirects=True,
                     )
                 )

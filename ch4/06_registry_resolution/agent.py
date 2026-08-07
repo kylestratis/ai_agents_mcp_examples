@@ -13,7 +13,7 @@ import os
 from typing import Literal
 from urllib.parse import quote
 
-import httpx
+import httpx2
 from anthropic import Anthropic
 from client import MCPClient
 from dotenv import load_dotenv
@@ -34,7 +34,7 @@ async def resolve_server(name: str, transport: Transport) -> dict:
     Getting server connection settings from the MCP Registry using
     only the server's name.
     """
-    async with httpx.AsyncClient(base_url=REGISTRY_URL) as http:
+    async with httpx2.AsyncClient(base_url=REGISTRY_URL) as http:
         response = await http.get(
             f"/v0.1/servers/{quote(name, safe='')}/versions/latest"
         )
@@ -77,7 +77,7 @@ async def main() -> None:
         try:
             settings = await resolve_server(name, transport)
             print(f"{name} ({transport}): {settings}")
-        except (ValueError, httpx.HTTPError) as e:
+        except (ValueError, httpx2.HTTPError) as e:
             print(f"{name} ({transport}): could not resolve — {e}")
 
     if not os.environ.get("RUN_REGISTRY_CONNECT"):

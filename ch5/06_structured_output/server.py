@@ -1,10 +1,12 @@
-from mcp.server.fastmcp import FastMCP, Image
+from io import BytesIO
+
+from mcp.server.mcpserver import Image, MCPServer
 from PIL import Image as PILImage
 from PIL import ImageDraw
 from pydantic import BaseModel
 
-# Initialize FastMCP server
-mcp = FastMCP("structured-output-server")
+# Initialize MCP server
+mcp = MCPServer("structured-output-server")
 
 
 class ReportCard(BaseModel):
@@ -37,7 +39,9 @@ async def generate_report_card_image(report_card: ReportCard) -> Image:
     image = PILImage.new("RGB", (400, 200), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
     draw.text((100, 100), report_card.name, fill=(0, 0, 0))
-    return Image(data=image.tobytes())
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return Image(data=buffer.getvalue(), format="png")
 
 
 if __name__ == "__main__":

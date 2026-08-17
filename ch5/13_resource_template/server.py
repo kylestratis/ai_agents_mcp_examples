@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
-# Initialize FastMCP server
-mcp = FastMCP("resource-template-server")
+# Initialize MCP server
+mcp = MCPServer("resource-template-server")
 
 
 @mcp.resource("file:///{filename}")

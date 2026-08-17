@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
-# Initialize FastMCP server
-mcp = FastMCP("minimal-stdio-server")
+# Initialize MCP server
+mcp = MCPServer("minimal-stdio-server")
 
 if __name__ == "__main__":
     # Initialize and run the server
     mcp.run()
-    # mcp.run(t"streamable-http")
+    # mcp.run("streamable-http")

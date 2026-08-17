@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP, Icon
+from mcp.server.mcpserver import Icon, MCPServer
 
 SERVER_DIR = Path(__file__).parent
 
@@ -12,7 +12,7 @@ sloth_icon = Icon(
 )
 icons = [brain_icon, sloth_icon]
 
-mcp = FastMCP("icons-server", icons=icons)
+mcp = MCPServer("icons-server", icons=icons)
 
 
 @mcp.tool(icons=[brain_icon])
@@ -23,7 +23,7 @@ async def think() -> str:
 
 @mcp.prompt(icons=[sloth_icon])
 async def sloth_prompt() -> str:
-    """A prompt that makes the server think slowlywith an icon."""
+    """A prompt that makes the server think slowly with an icon."""
     return "Think very slowly, like a sloth"
 
 

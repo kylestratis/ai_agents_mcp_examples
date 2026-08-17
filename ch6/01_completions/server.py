@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
-from mcp.types import (
+from mcp.server.mcpserver import MCPServer
+from mcp_types import (
     Completion,
     CompletionArgument,
     CompletionContext,
@@ -9,8 +9,8 @@ from mcp.types import (
     ResourceTemplateReference,
 )
 
-# Initialize FastMCP server
-mcp = FastMCP("completion-server")
+# Initialize MCP server
+mcp = MCPServer("completion-server")
 
 
 @mcp.resource("file:///{filename}")
@@ -51,7 +51,7 @@ async def simple_completion(
                 for suggestion in prompt_default_suggestions
                 if argument.value.lower() in suggestion.lower()
             ]
-            if previous := context.arguments.get("username"):
+            if context and (previous := context.arguments.get("username")):
                 suggested.extend(
                     [
                         prev
@@ -66,7 +66,7 @@ async def simple_completion(
                 for suggestion in resource_template_default_suggestions
                 if argument.value.lower() in suggestion.lower()
             ]
-            if previous := context.arguments.get("filename"):
+            if context and (previous := context.arguments.get("filename")):
                 suggested.extend(
                     [
                         prev
@@ -74,7 +74,7 @@ async def simple_completion(
                         if argument.value.lower() in prev.lower()
                     ]
                 )
-    completion = Completion(values=suggested, total=len(suggested), hasMore=False)
+    completion = Completion(values=suggested, total=len(suggested), has_more=False)
     return completion
 
 

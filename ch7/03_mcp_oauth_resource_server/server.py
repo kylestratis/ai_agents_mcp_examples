@@ -1,13 +1,13 @@
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pydantic import AnyHttpUrl
 
 
 # Auth settings - these will come from your authorization server's documentation
 AUTHORIZATION_SERVER_SETTINGS = AuthSettings(
     issuer_url=AnyHttpUrl("https://authorization-server.com"),
-    resource_server_url=AnyHttpUrl("https://localhost"),
+    resource_server_url=AnyHttpUrl("https://localhost:3001"),
     required_scopes=["read", "write"],
 )
 
@@ -18,8 +18,8 @@ class MyTokenVerifier(TokenVerifier):
         pass
 
 
-# Initialize FastMCP server
-mcp = FastMCP(
+# Initialize MCP server
+mcp = MCPServer(
     "resource-server",
     token_verifier=MyTokenVerifier(),
     auth=AUTHORIZATION_SERVER_SETTINGS,

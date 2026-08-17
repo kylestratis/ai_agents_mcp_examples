@@ -1,5 +1,5 @@
 """
-Calculator MCP server using FastMCP.
+Calculator MCP server using MCPServer.
 Provides mathematical operations as tools for calculation tasks.
 """
 
@@ -7,17 +7,16 @@ import math
 from contextlib import AsyncExitStack, asynccontextmanager
 
 import uvicorn
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.session import ServerSession
+from mcp.server.mcpserver import MCPServer
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
-# Initialize FastMCP server
-mcp = FastMCP("calculator", stateless_http=True, json_response=True)
+# Initialize MCP server
+mcp = MCPServer("calculator")
 
 
 @mcp.tool()
-async def add(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def add(a: float, b: float) -> str:
     """Add two numbers together.
 
     Args:
@@ -25,12 +24,11 @@ async def add(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
         b: Second number
     """
     result = a + b
-    await ctx.info(f"Adding {a} and {b} = {result}")
     return f"{a} + {b} = {result}"
 
 
 @mcp.tool()
-async def subtract(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def subtract(a: float, b: float) -> str:
     """Subtract the second number from the first.
 
     Args:
@@ -38,12 +36,11 @@ async def subtract(a: float, b: float, ctx: Context[ServerSession, None]) -> str
         b: Number to subtract
     """
     result = a - b
-    await ctx.info(f"Subtracting {a} and {b} = {result}")
     return f"{a} - {b} = {result}"
 
 
 @mcp.tool()
-async def multiply(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def multiply(a: float, b: float) -> str:
     """Multiply two numbers together.
 
     Args:
@@ -51,12 +48,11 @@ async def multiply(a: float, b: float, ctx: Context[ServerSession, None]) -> str
         b: Second number
     """
     result = a * b
-    await ctx.info(f"Multiplying {a} and {b} = {result}")
     return f"{a} × {b} = {result}"
 
 
 @mcp.tool()
-async def divide(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
+async def divide(a: float, b: float) -> str:
     """Divide the first number by the second.
 
     Args:
@@ -67,14 +63,11 @@ async def divide(a: float, b: float, ctx: Context[ServerSession, None]) -> str:
         return "Error: Division by zero is not allowed"
 
     result = a / b
-    await ctx.info(f"Dividing {a} by {b} = {result}")
     return f"{a} ÷ {b} = {result}"
 
 
 @mcp.tool()
-async def power(
-    base: float, exponent: float, ctx: Context[ServerSession, None]
-) -> str:
+async def power(base: float, exponent: float) -> str:
     """Raise a number to a power.
 
     Args:
@@ -83,14 +76,13 @@ async def power(
     """
     try:
         result = base**exponent
-        await ctx.info(f"Raising {base} to the power of {exponent} = {result}")
         return f"{base}^{exponent} = {result}"
     except Exception as e:
         return f"Error calculating power: {str(e)}"
 
 
 @mcp.tool()
-async def square_root(number: float, ctx: Context[ServerSession, None]) -> str:
+async def square_root(number: float) -> str:
     """Calculate the square root of a number.
 
     Args:
@@ -100,7 +92,6 @@ async def square_root(number: float, ctx: Context[ServerSession, None]) -> str:
         return "Error: Cannot calculate square root of negative number"
 
     result = math.sqrt(number)
-    await ctx.info(f"Calculating the square root of {number} = {result}")
     return f"√{number} = {result}"
 
 
@@ -111,7 +102,15 @@ async def lifespan(app: Starlette):
         yield
 
 
-app = Starlette(routes=[Mount("/", mcp.streamable_http_app())], lifespan=lifespan)
+app = Starlette(
+    routes=[
+        Mount(
+            "/",
+            mcp.streamable_http_app(stateless_http=True, json_response=True),
+        )
+    ],
+    lifespan=lifespan,
+)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3333)

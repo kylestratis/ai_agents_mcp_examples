@@ -1,8 +1,8 @@
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.prompts.base import AssistantMessage, UserMessage
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.prompts.base import AssistantMessage, UserMessage
 
-# Initialize FastMCP server
-mcp = FastMCP("multiturn-prompt-server")
+# Initialize MCP server
+mcp = MCPServer("multiturn-prompt-server")
 
 
 @mcp.prompt()
@@ -21,11 +21,11 @@ Create a list of {main_idea_count} main ideas from the following text:
     """
     )
 
-    assistant_prefill_test = f"""
+    assistant_prefill_text = f"""
 Here are {main_idea_count} main ideas from the text:
 1.
 """
-    assistant_prefill = AssistantMessage(content=assistant_prefill_test)
+    assistant_prefill = AssistantMessage(content=assistant_prefill_text)
     return [user_input, assistant_prefill]
 
 

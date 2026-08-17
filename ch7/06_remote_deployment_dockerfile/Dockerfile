@@ -9,7 +9,9 @@ WORKDIR /app
 COPY server.py /app/
 
 # Install dependencies
-RUN pip install --no-cache-dir "mcp[cli]>=1.12.3" "starlette>=0.48.0" "uvicorn>=0.38.0"
+RUN pip install --no-cache-dir "mcp[cli]>=2.0.0" \ 
+    "starlette>=0.48.0" \
+    "uvicorn>=0.38.0"
 
 # Expose the port the app runs on
 EXPOSE 8000
